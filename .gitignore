@@ -1,0 +1,26 @@
+# Python (Django, NumPy, Pandas)
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+db.sqlite3
+media/
+static/
+
+# JavaScript (React)
+node_modules/
+build/
+dist/
+.eslintcache
+npm-debug.log*
+
+# IDEs (PyCharm & VS Code)
+.idea/
+.vscode/
+*.swp
+*.sublime-project
+
+# System files
+.DS_Store
+Thumbs.db
