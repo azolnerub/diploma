@@ -31,7 +31,7 @@ class Employee(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name='Пользователь')
     position = models.ForeignKey(Position, on_delete=models.SET_NULL, null=True, verbose_name='Должность')
-    hire_date = models.CharField('Дата приема на работу')
+    hire_date = models.DateField('Дата приема на работу')
     status = models.CharField('Статус', max_length=20, choices=STATUS_CHOICES, default='active')
 
     class Meta:

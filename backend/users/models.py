@@ -9,8 +9,8 @@ class User(AbstractUser):
     )
 
     role = models.CharField('Роль', max_length=20, choices=ROLE_CHOICES, default='employee')
-    patronymic = models.CharFiels('ФИО', max_length=100, blank=True)
-    plone = models.CharField('Телефон', max_length=20, blank=True)
+    patronymic = models.CharField('ФИО', max_length=100, blank=True)
+    phone = models.CharField('Телефон', max_length=20, blank=True)
 
     class Meta:
         verbose_name = 'Пользователь',
