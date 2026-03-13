@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-class EmployeeAnalyticsSerializer(serializers.ModelSerializer):
+class EmployeeAnalyticsSerializer(serializers.Serializer):
     employee_id = serializers.IntegerField()
     employee_name = serializers.CharField()
     average_score = serializers.FloatField()
@@ -8,7 +8,7 @@ class EmployeeAnalyticsSerializer(serializers.ModelSerializer):
     competencies_count = serializers.IntegerField()
     last_assessments_date = serializers.DateField()
 
-class DepartmentAnalyticsSerializer(serializers.ModelSerializer):
+class DepartmentAnalyticsSerializer(serializers.Serializer):
     department_id = serializers.IntegerField()
     department_name = serializers.CharField()
     employees_count = serializers.IntegerField()

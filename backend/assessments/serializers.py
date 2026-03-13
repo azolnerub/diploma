@@ -4,9 +4,9 @@ from .models import Assessment, AssessmentHistory
 #from competencies.serializers import CompetencySerializer
 
 class AssessmentSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(source='employee.user.get_full.name', read_only=True)
+    employee_name = serializers.CharField(source='employee.user.get_full_name', read_only=True)
     competency_name = serializers.CharField(source='competency.name', read_only=True)
-    assessor_name = serializers.CharField(source='assessor.get_full.name', read_only=True)
+    assessor_name = serializers.CharField(source='assessor.get_full_name', read_only=True)
 
     class Meta:
         model = Assessment

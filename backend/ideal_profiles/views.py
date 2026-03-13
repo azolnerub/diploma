@@ -17,7 +17,7 @@ class IdealProfileViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(position_id=position_id)
         return queryset
 
-    @action(detail=True, methods=['get'])
+    @action(detail=False, methods=['get'])
     def for_position(self, request):
         position_id = request.query_params.get('position_id')
         if not position_id:
@@ -32,7 +32,7 @@ class IdealProfileViewSet(viewsets.ModelViewSet):
             'profiles': serializer.data,
             'total_weight': total_weight
         })
-    @action(detail=True, methods=['get'])
+    @action(detail=False, methods=['get'])
     def bulk_create(self, request):
         profiles_data = request.data.get('profiles', [])
         serializer = self.get_serializer(data=profiles_data, many=True)

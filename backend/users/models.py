@@ -9,11 +9,11 @@ class User(AbstractUser):
     )
 
     role = models.CharField('Роль', max_length=20, choices=ROLE_CHOICES, default='employee')
-    patronymic = models.CharField('ФИО', max_length=100, blank=True)
+    patronymic = models.CharField('Отчество', max_length=50, blank=True)
     phone = models.CharField('Телефон', max_length=20, blank=True)
 
     class Meta:
-        verbose_name = 'Пользователь',
+        verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
 
     def __str__(self):

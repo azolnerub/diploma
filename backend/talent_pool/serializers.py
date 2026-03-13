@@ -4,7 +4,7 @@ from .models import TalentPool
 #from employees.models import Employee
 
 class TalentPoolSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(source='employee.user.get_full.name', read_only=True)
+    employee_name = serializers.CharField(source='employee.user.get_full_name', read_only=True)
     current_position = serializers.CharField(source='employee.position.name', read_only=True)
     target_position_name = serializers.CharField(source='target_position.name', read_only=True)
 
