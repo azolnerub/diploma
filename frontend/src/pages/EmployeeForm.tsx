@@ -81,18 +81,20 @@ const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+        
     // Проверка, что ID выбраны, а не просто введен текст
     if (!form.department_id || !form.position_id) {
-      setError('Пожалуйста, выберите отдел и должность из списка');
-      setLoading(false);
-      return;
+      if (!isEdit || (isEdit && (!deptSearch || !posSearch))) {
+        setError('Пожалуйста, выберите отдел и должность из списка');
+        setLoading(false);
+        return;
+      } 
     }
     try {
       const payload = {
         ...form,
-        position_id: Number(form.position_id),
-        department_id: Number(form.department_id),
+        position_id: form.position_id !== '' ? Number(form.position_id) : null,
+        department_id: form.department_id !== '' ? Number(form.department_id) : null,
       };
 
       if (isEdit) {
@@ -163,7 +165,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               onFocus={() => setShowDeptList(true)}
               onBlur={() => setTimeout(() => setShowDeptList(false), 200)}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none"
-              required
+              required={!isEdit}
             />
             {showDeptList && (
               <div className="absolute z-20 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto">
@@ -200,7 +202,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               onFocus={() => setShowPosList(true)}
               onBlur={() => setTimeout(() => setShowPosList(false), 200)}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none"
-              required
+              required={!isEdit}
             />
             {showPosList && (
               <div className="absolute z-20 w-full mt-1 bg-white border rounded-lg shadow-xl max-h-60 overflow-y-auto">

@@ -1,3 +1,4 @@
+from django.template.defaulttags import comment
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from django.contrib.auth.models import User
@@ -128,6 +129,25 @@ class EmployeeEvaluationListView(generics.ListAPIView):
         return Evaluation.objects.filter(employee_id=employee_id)
 
 # Добавление компетенции в профиль сотрудника
+class AddCompetencyToProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, employee_id):
+        employee = get_object_or_404(Employee, id=employee_id)
+        competency_id = request.data.get('competency_id')
+        competency = get_object_or_404(Competency, id=competency_id)
+
+        if Evaluation.objects.filter(employee=employee,competency=competency).exists():
+            return Response({"message": "Компетенция уже добавлена"}, status=400)
+
+        Evaluation.objects.create(
+            employee=employee,
+            competency=competency,
+            value=0,
+            comment="Компетенция добавлена HR",
+            manager=request.user
+        )
+        return Response({"message": "Компетенция добавлена в профиль"}, status=201)
 class AddCompetencyToEmployeeView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
 

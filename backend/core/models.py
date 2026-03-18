@@ -50,7 +50,7 @@ class Employee(models.Model):
 class Evaluation(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
-    value = models.IntegerField(choices=[(i, i) for i in range(1, 6)])  # 1-5
+    value = models.IntegerField(choices=[(i, i) for i in range(0, 101)])
     date = models.DateField(auto_now_add=True)
     comment = models.TextField(blank=True)
     manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='evaluations_given')

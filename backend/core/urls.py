@@ -3,7 +3,7 @@ from .views import (CurrentUserView, EmployeeListView, EmployeeCreateView, Emplo
                     EmployeeDeleteView, EmployeeDetailView, AddCompetencyToEmployeeView,
                     RemoveCompetencyFromEmployeeView, IdealProfileListCreateView,
                     IdealProfileUpdateDeleteView, DepartmentListView, PositionListView,
-                    CompetencyListView, EmployeeEvaluationListView)
+                    CompetencyListView, EmployeeEvaluationListView, AddCompetencyToProfileView)
 
 urlpatterns = [
     path('me/', CurrentUserView.as_view(), name='current_user'),
@@ -13,6 +13,7 @@ urlpatterns = [
     path('employees/<int:pk>/delete/', EmployeeDeleteView.as_view(), name='employee_delete'),
     path('employees/<int:pk>/', EmployeeDetailView.as_view(), name='employee_detail'),
 
+    path('employees/<int:employee_id>/competencies/add-simple/', AddCompetencyToProfileView.as_view()),
     path('employees/<int:employee_id>/competencies/add/', AddCompetencyToEmployeeView.as_view()),
     path('employees/<int:employee_id>/competencies/<int:competency_id>/remove/', RemoveCompetencyFromEmployeeView.as_view()),
 
