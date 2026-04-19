@@ -1,120 +1,131 @@
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import {Users, Trophy, BarChart3, Star, LogOut, LayoutDashboard} from 'lucide-react';
 
 export default function Dashboard() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="h-12 w-12 bg-indigo-600 rounded-xl rotate-45 animate-bounce"></div>
-          <p className="text-slate-500 font-medium tracking-wide">Загрузка системы...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <DashboardLoader/>;
+  if (!user) return null;
 
-  if (!user) {return null;}
+  const firstName = user.full_name.split(' ')[1] || user.full_name.split(' ')[0];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
-      {/* Современная Шапка */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-200">
-              A
-            </div>
-            <h1 className="text-xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-              HR.Analytics
-            </h1>
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-indigo-100">
+      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/60">
+      <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-200 rotate-3 hover:rotate-0 transition-transform duration-300">
+            <LayoutDashboard size={24}/>
           </div>
-
-          <div className="flex items-center gap-5">
-            <div className="hidden sm:block text-right">
-              <p className="text-sm font-bold text-slate-800">{user.full_name}</p>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
-                {user.role?.toUpperCase()}
-              </span>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-slate-900">HR.Portal</h1>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Online</span>
             </div>
-            <button
-              onClick={logout}
-              className="group flex items-center gap-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 px-4 py-2 rounded-xl transition-all font-bold text-sm"
-            >
-              Выйти 
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </button>
           </div>
         </div>
+        <div className="flex items-center gap-6">
+          <div className="hidden md:flex flex-col items-end border-r border-slate-200 pr-6">
+            <p className="text-sm font-black text-slate-800">{user.full_name}</p>
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md uppercase tracking-wider">{user.role}
+            </span>
+          </div>
+          <button
+          onClick={logout}
+          className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 rounded-2xl transition-all group"
+          title="Выйти из системы">
+            <LogOut size={20} className="group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
+      </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-8 py-12">
-        {/* Приветствие */}
-        <div className="mb-12">
-          <h2 className="text-4xl font-black text-slate-900 mb-2">
-            Здравствуйте, {user.full_name.split(' ').slice(1).join(' ')}! 👋
-          </h2>
-          <p className="text-slate-500 text-lg">Рады видеть вас в системе управления талантами.</p>
-        </div>
-
-        {/* Сетка карточек (Bento Grid Style) */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
-          
-          {/* Главная карточка: Сотрудники */}
-          <div 
-            onClick={() => navigate(user?.role === 'hr' ? '/hr' : '/employees')}
-            className="md:col-span-4 bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all cursor-pointer group relative overflow-hidden"
+      <main className="max-w-7xl mx-auto px-6 py-12">
+        <header className="mb-12 relative">
+          <div className="absolute -top-10 -left-10 w-40 h-40 bg-indigo-100/50 rounded-full blur-3xl -z-10"/>
+          <h2 className="text-5xl font-black text-slate-900 tracking-tight mb-3">Здравствуйте, {firstName} <span className="inline-block animate-bounce-slow">👋</span></h2>
+          <p className="text-slate-500 text-lg font-medium max-w-2xl leading-relaxed">
+            Ваш центр управления талантами. Здесь вы можете анализировать команду, управлять резервом и оценивать прогресс
+          </p>
+        </header>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-[280px]">
+          <div
+          onClick={() => navigate(user?.role === 'hr' ? '/hr' : '/employees')}
+          className="md:col-span-8 bg-white border border-slate-200 rounded-[2.5rem] p-10 flex flex-col justify-between hover:shadow-2xl hover:shadow-indigo-500/5 hover:border-indigo-200 transition-all cursor-pointer group relative overflow-hidden"
           >
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
+              <Users size={200}/>
+            </div>
+
             <div className="relative z-10">
-              <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-6 text-2xl group-hover:scale-110 transition-transform">
-                👥
+              <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-100 group-hover:scale-110 transition-transform duration-500">
+               <Users size={28}/> 
               </div>
-              <h3 className="text-3xl font-bold mb-3">База сотрудников</h3>
-              <p className="text-slate-500 max-w-md text-lg">
-                {user?.role === 'hr' 
-                  ? 'Полный доступ к управлению штатом, редактированию данных и архиву.' 
-                  : 'Список коллег вашего департамента с контактной информацией.'}
+              <h3 className="text-3xl font-black mb-3">Управление <br/>сотрудниками</h3>
+              <p className="text-slate-500 max-w-sm font-medium leading-relaxed">
+                {user?.role === 'hr'
+                ? 'Управление кадровым составом, профилями и историями развития'
+              : 'Просмотр команды и доступ к контактам коллег'}
               </p>
             </div>
-            <div className="absolute -bottom-10 -right-10 text-[12rem] opacity-[0.03] select-none font-black">USERS</div>
           </div>
-
-          {/* Карточка: Оценки (Только для менеджеров) */}
-          {user?.role === 'manager' && (
-            <div 
-              onClick={() => navigate('/hr/evaluate')}
-              className="md:col-span-2 bg-gradient-to-br from-purple-600 to-indigo-700 p-8 rounded-[2rem] text-white shadow-xl shadow-indigo-100 hover:scale-[1.02] transition-all cursor-pointer flex flex-col justify-between"
+            {user?.role === 'manager' && (
+            <div
+            onClick={() => navigate('/hr/evaluate')}
+            className="md:col-span-4 bg-slate-900 rounded-[2.5rem] p-10 text-white hover:bg-indigo-700 transition-all cursor-pointer group flex flex-col justify-between"
             >
-              <div className="text-3xl">⭐</div>
+              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center group-hover:bg-white/20 transition-colors">
+              <Star className="text-amber-400 fill-amber-400" size={24}/>
+              </div>
               <div>
-                <h3 className="text-2xl font-bold mb-2">Оценки</h3>
-                <p className="text-purple-100 text-sm">Проведение аттестации и анализ компетенций команды.</p>
+                <h3 className="text-2xl font-black mb-2">Оценки</h3>
+                <p className="text-slate-400 group-hover:text-white/80 transition-colors text-sm font-medium">Оценивание сотрудников</p>                
               </div>
             </div>
-          )}
+            )}
 
-          {/* Карточка: Кадровый резерв */}
-          <div className="md:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 text-xl">
-              🏆
+            <div 
+            onClick={() => navigate('/reserve')}
+            className="md:col-span-4 bg-white border border-slate-200 rounded-[2.5rem] p-10 hover:shadow-2xl hover:border-emerald-200 transition-all cursor-pointer group flex flex-col justify-between"
+            >
+              <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all duration-500">
+                <Trophy size={28}/>
+              </div>
+              <div>
+                <h3 className="text-2xl font-black mb-3">Кадровый резерв</h3>
+                <p className="text-slate-500 text-sm font-medium">Поиск и развитие будущих лидеров</p>
+              </div>
             </div>
-            <h3 className="text-xl font-bold mb-2">Кадровый резерв</h3>
-            <p className="text-slate-500 text-sm">Алгоритмы подбора идеальных кандидатов на вакансии.</p>
-          </div>
 
-          {/* Дополнительная карточка: Аналитика (Декор или реальная ссылка) */}
-          <div className="md:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm opacity-60 hover:opacity-100 transition-opacity cursor-not-allowed">
-            <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-4 text-xl">
-              📊
+            <div className="md:col-span-5 bg-white border border-slate-100 rounded-[2.5rem] p-10 flex items-center justify-between opacity-50 grayscale hover:grayscale-0 transition-all duration-500 border-dashed">
+              <div>
+                <div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center mb-6">
+                  <BarChart3 size={24}/>
+                </div>
+                <h3 className="text-2xl font-black mb-1 text-slate-400">Аналитика</h3>
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">В разработке...</p>
+              </div>
+              <div className="hidden lg:block w-32 h-20 bg-slate-50 rounded-xl animate-pulse" />
             </div>
-            <h3 className="text-xl font-bold mb-2">Отчёты</h3>
-            <p className="text-slate-500 text-sm">Визуализация прогресса компании (скоро).</p>
-          </div>
-
         </div>
       </main>
+    </div>
+  );
+}
+
+function DashboardLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+      <div className="flex flex-col items-center gap-6">
+        <div className="relative">
+          <div className="h-16 w-16 border-4 border-indigo-100 border-t-indigo-600 rounded-2xl animate-spin" />
+          <LayoutDashboard className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600" size={24} />
+        </div>
+        <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[10px]">Initializing Portal</p>
+      </div>
     </div>
   );
 }

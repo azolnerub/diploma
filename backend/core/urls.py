@@ -1,9 +1,13 @@
 from django.urls import path
 from .views import (CurrentUserView, EmployeeListView, EmployeeCreateView, EmployeeUpdateView,
                     EmployeeDeleteView, EmployeeDetailView, AddCompetencyToEmployeeView,
-                    RemoveCompetencyFromEmployeeView, IdealProfileListCreateView,
-                    IdealProfileUpdateDeleteView, DepartmentListView, PositionListView,
-                    CompetencyListView, EmployeeEvaluationListView, AddCompetencyToProfileView)
+                    RemoveCompetencyFromEmployeeView, DepartmentListView, PositionListView,
+                    CompetencyListView, EmployeeEvaluationListView, AddCompetencyToProfileView,
+                    CategoryListView, PositionCompetenciesView, PositionCompetenciesUpdateView,
+                    EmployeeDynamicsView, RoleListCreateView, RolePositionMatchView,
+                    RoleProfileView, RoleMatchView, PositionCompetenciesFromRolesView,
+                    PositionProfileListCreateView, PositionProfileUpdateDeleteView,
+                    AddToReserveView, RemoveFromReserveView, PositionCandidatesView)
 
 urlpatterns = [
     path('me/', CurrentUserView.as_view(), name='current_user'),
@@ -18,11 +22,26 @@ urlpatterns = [
     path('employees/<int:employee_id>/competencies/<int:competency_id>/remove/', RemoveCompetencyFromEmployeeView.as_view()),
 
     path('departments/', DepartmentListView.as_view(), name='department_list'),
+
     path('positions/', PositionListView.as_view(), name='position_list'),
+    path('positions/<int:pk>/competencies/', PositionCompetenciesView.as_view(), name='position_competencies'),
+    path('positions/<int:pk>/competencies/update/', PositionCompetenciesUpdateView.as_view(), name='position_competencies_update'),
+    path('positions/<int:position_id>/competencies-from-roles/', PositionCompetenciesFromRolesView.as_view(), name='position_competencies_from_roles'),
+    path('positions/<int:position_id>/profile/', PositionProfileListCreateView.as_view(), name='position_profile_list'),
+    path('positions/<int:position_id>/profile/<int:pk>/', PositionProfileUpdateDeleteView.as_view(), name='position_profile_detail'),
+    path('positions/<int:position_id>/candidates/', PositionCandidatesView.as_view(), name='position_candidates'),
+
+    path('employees/<int:employee_id>/reserve/add/', AddToReserveView.as_view(), name='add_to_reserve'),
+    path('employees/<int:employee_id>/reserve/remove/', RemoveFromReserveView.as_view(), name='remove_from_reserve'),
+
+    path('employees/dynamics/', EmployeeDynamicsView.as_view(), name='employee_dynamics'),
 
     path('competencies/', CompetencyListView.as_view(), name='competency_list'),
+    path('categories/', CategoryListView.as_view(), name='category_list'),
     path('employees/<int:employee_id>/evaluations/', EmployeeEvaluationListView.as_view(), name='employee_evaluations'),
 
-    path('ideal-profiles/', IdealProfileListCreateView.as_view()),
-    path('ideal-profiles/<int:pk>/', IdealProfileUpdateDeleteView.as_view())
+    path('roles/', RoleListCreateView.as_view(), name='role_list'),
+    path('roles/<int:role_id>/profile/', RoleProfileView.as_view(), name='role_profile'),
+    path('employees/<int:employee_id>/match/role/<int:role_id>/', RoleMatchView.as_view(), name='role_match'),
+    path('employees/<int:employee_id>/match/role/<int:role_id>/position/<int:position_id>/', RolePositionMatchView.as_view(), name='role_position_match'),
 ]

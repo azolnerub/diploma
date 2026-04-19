@@ -69,7 +69,6 @@ export default function Employees() {
   };
 
   const handleEdit = (id: number) => navigate(`/hr/edit/${id}`);
-  const handleViewProfile = (id: number) => navigate(`/hr/profile/${id}`);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-[400px]">
@@ -81,7 +80,7 @@ export default function Employees() {
 
   // Вид для обычного сотрудника
   if (user?.role === 'employee') {
-    const me = employees[0]; // Предполагаем, что API возвращает только его данные
+    const me = employees[0];
     return (
       <div className="max-w-2xl mx-auto mt-10">
         <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
@@ -115,15 +114,9 @@ export default function Employees() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 px-4 md:px-8 pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-3xl font-black text-slate-900 tracking-tight">Реестр персонала</h2>
-        <button 
-          onClick={loadEmployees} 
-          className="flex items-center gap-2 px-6 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold shadow-sm hover:bg-slate-50 transition-all active:scale-95"
-        >
-          <span>🔄</span> Обновить данные
-        </button>
       </div>
 
       {/* Фильтры */}
@@ -139,7 +132,8 @@ export default function Employees() {
           />
         </div>
 
-        <div className="min-w-[200px]">
+        {user?.role === 'hr' && (
+        <div className="min-w-[200px] flex-1">
           <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Департамент</label>
           <select
             value={selectedDepartment}
@@ -150,6 +144,7 @@ export default function Employees() {
             {allDepartments.map(dept => <option key={dept} value={dept}>{dept}</option>)}
           </select>
         </div>
+        )}
 
         <div className="min-w-[200px]">
           <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Должность</label>
@@ -172,8 +167,8 @@ export default function Employees() {
       </div>
 
       {/* Таблица */}
-      <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[2rem] shadow-xl shadow-slate-200/40 border border-slate-100 overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[800px]">
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-100">
               <th className="px-8 py-5 text-xs font-bold text-slate-400 uppercase tracking-widest">Сотрудник</th>
@@ -187,12 +182,10 @@ export default function Employees() {
             {filteredEmployees.map(emp => (
               <tr key={emp.id} className="group hover:bg-indigo-50/30 transition-colors">
                 <td className="px-8 py-5">
-                  <button 
-                    onClick={() => handleViewProfile(emp.id)}
-                    className="font-bold text-slate-900 hover:text-indigo-600 transition-colors text-lg block text-left"
-                  >
+                  <div className="font-bold text-slate-900 text-lg">
                     {emp.full_name}
-                  </button>
+                  </div>
+
                 </td>
                 <td className="px-6 py-5">
                   <p className="font-semibold text-slate-700">{emp.position_name || '—'}</p>
@@ -205,22 +198,18 @@ export default function Employees() {
                   </span>
                 </td>
                 <td className="px-8 py-5 text-right">
-                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex justify-end gap-2 transition-opacity">
                     {user?.role === 'hr' && (
                       <>
                         <button 
                           onClick={() => handleEdit(emp.id)} 
-                          className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all"
-                          title="Редактировать"
-                        >
-                          ✏️
+                          className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                          title="Редактировать">✏️
                         </button>
                         <button 
                           onClick={() => handleDelete(emp.id)} 
-                          className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all"
-                          title="Удалить"
-                        >
-                          🗑️
+                          className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                          title="Удалить">🗑️
                         </button>
                       </>
                     )}

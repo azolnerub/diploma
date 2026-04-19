@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 interface Employee {
   id: number;
@@ -12,42 +13,46 @@ interface Employee {
 
 export default function EvaluateList() {
   const navigate = useNavigate();
+  const {user, loading: authloading} = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get<Employee[]>('employees/')  // бэкенд уже фильтрует по отделу руководителя
+    if (authloading) return;
+    api.get<Employee[]>('employees/') 
       .then(res => {
-        setEmployees(res.data);
+        const filtered = res.data.filter(emp => emp.id !== user?.id);
+        setEmployees(filtered);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [user?.id]);
 
-  if (loading) return <div className="p-8 text-center">Загрузка сотрудников отдела...</div>;
+  if (loading || authloading) {
+    return <div className="p-8 text-center text-slate-500 font-medium">Загрузка данных...</div>;
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold mb-8">Оценка компетенций сотрудников</h1>
+      <h1 className="text-3xl font-bold mb-8 text-slate-900">Оценка компетенций сотрудников</h1>
 
-      <div className="bg-white rounded-2xl shadow overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
         <table className="min-w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-slate-50/50 border-b border-slate-100">
             <tr>
-              <th className="px-6 py-4 text-left">ФИО</th>
-              <th className="px-6 py-4 text-left">Должность</th>
-              <th className="px-6 py-4 text-left">Статус</th>
-              <th className="px-6 py-4 text-right">Действие</th>
+              <th className="px-8 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-widest">ФИО</th>
+              <th className="px-8 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-widest">Должность</th>
+              <th className="px-8 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-widest">Статус</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {employees.map(emp => (
-              <tr key={emp.id} className="border-t hover:bg-gray-50">
-                <td className="px-6 py-5 font-medium">{emp.full_name}</td>
-                <td className="px-6 py-5">{emp.position_name || '—'}</td>
+              <tr key={emp.id} className="hover:bg-indigo-50/30 transition-colors">
+                <td className="px-8 py-5 font-bold text-slate-900 text-lg">{emp.full_name}</td>
+                <td className="px-6 py-5 text-slate-600 font-medium">{emp.position_name || '—'}</td>
                 <td className="px-6 py-5">
-                  <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                    emp.status === 'Работает' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                  <span className={`px-4 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-full ${
+                    emp.status === 'Работает' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
                   }`}>
                     {emp.status}
                   </span>
@@ -55,7 +60,7 @@ export default function EvaluateList() {
                 <td className="px-6 py-5 text-right">
                   <button
                     onClick={() => navigate(`/hr/evaluate/${emp.id}`)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-indigo-100 transition-all active:scale-95"
                   >
                     Оценить
                   </button>
@@ -66,7 +71,10 @@ export default function EvaluateList() {
         </table>
 
         {employees.length === 0 && (
-          <div className="p-12 text-center text-gray-500">В вашем отделе пока нет сотрудников</div>
+          <div className="p-20 text-center">
+            <p className="text-4xl mb-4">👥</p>
+            <p className="text-slate-400 font-medium text-lg">В вашем отделе пока нет сотрудников</p>
+            </div>
         )}
       </div>
     </div>
