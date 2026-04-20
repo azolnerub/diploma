@@ -13,8 +13,8 @@ export default function HRPanel() {
 
   const tabs = [
     { id: 'create', label: 'Добавить сотрудника', icon: UserPlus },
-    { id: 'position_comp', label: 'Компетенции должностей', icon: Settings },
-    { id: 'ideal', label: 'Идеальные профили', icon: Target },
+    { id: 'position_comp', label: 'Идеальные профили', icon: Settings },
+    { id: 'ideal', label: 'Конструктор ролей', icon: Target },
   ] as const;
 
   return (

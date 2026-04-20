@@ -64,8 +64,12 @@ class Evaluation(models.Model):
 class Reserve(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     position = models.ForeignKey(Position, on_delete=models.CASCADE)
+    target_role = models.ForeignKey('Role', on_delete=models.SET_NULL, null=True, blank=True)
     date_added = models.DateField(auto_now_add=True)
     priority = models.IntegerField(default=1)
+
+    def __str__(self):
+        return f"{self.employee} → {self.position}"
 
 class Role(models.Model):
     name = models.CharField(max_length=150, verbose_name="Название роли")

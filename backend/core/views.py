@@ -564,6 +564,7 @@ class AddToReserveView(APIView):
     def post(self, request, employee_id):
         employee = get_object_or_404(Employee, pk=employee_id)
         position_id = request.data.get('position_id')
+        role_id = request.data.get('role_id')
 
         if not position_id:
             return Response({"detail": "Не указана целевая должность"}, status=400)
@@ -573,11 +574,19 @@ class AddToReserveView(APIView):
         if Reserve.objects.filter(employee=employee).exists():
             return Response({"detail": "Сотрудник уже в кадровом резерве"}, status=400)
 
-        Reserve.objects.create(
+        reserve = Reserve.objects.create(
             employee=employee,
             position=position,
             priority=1
         )
+
+        if role_id:
+            try:
+                role = Role.objects.get(pk=role_id)
+                reserve.target_role = role
+                reserve.save()
+            except Role.DoesNotExist:
+                pass
 
         return Response({"message": "Сотрудник добавлен в кадровый резерв"}, status=201)
 
@@ -599,16 +608,12 @@ class PositionCandidatesView(APIView):
         reserves = Reserve.objects.filter(
             position=position
         ).select_related(
-            'employee',
-            'employee__position',
-            'employee__department'
+            'employee', 'employee__position', 'employee__department', 'target_role'
         ).order_by('-priority', '-date_added')
 
         candidates = []
         for r in reserves:
             emp = r.employee
-
-            # ← ИСПРАВЛЕНИЕ: передаём position.id, а не объект position
             match_data = calculate_position_match(emp, position.id)
 
             candidates.append({
@@ -620,6 +625,7 @@ class PositionCandidatesView(APIView):
                 "dynamics_score": getattr(emp, 'dynamics_score', 0),
                 "priority": r.priority,
                 "target_position_name": position.name,
+                "target_role_id": r.target_role.id if r.target_role else None,
             })
 
         return Response({
@@ -629,3 +635,12 @@ class PositionCandidatesView(APIView):
             "candidate_count": len(candidates),
             "candidates": candidates
         })
+
+class PositionRolesView(generics.ListAPIView):
+    serializer_class = RoleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        position_id = self.kwargs['position_id']
+        position = get_object_or_404(Position, pk=position_id)
+        return position.roles.all()

@@ -12,9 +12,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source='user.role', read_only=True)
     position_name = serializers.CharField(source='position.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True)
-    department_id = serializers.IntegerField(source='department.id', read_only=True)
+    department_id = serializers.PrimaryKeyRelatedField(source='department', queryset=Department.objects.all(),  write_only=False)
     competencies = CompetencySerializer(many=True, read_only=True)
-    position_id = serializers.IntegerField(source='position.id', read_only=True)
+    position_id = serializers.PrimaryKeyRelatedField(source='position',  queryset=Position.objects.all(),  write_only=False)
     dynamics_score = serializers.SerializerMethodField()
     in_reserve = serializers.SerializerMethodField()
 

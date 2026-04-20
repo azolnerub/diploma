@@ -7,7 +7,8 @@ from .views import (CurrentUserView, EmployeeListView, EmployeeCreateView, Emplo
                     EmployeeDynamicsView, RoleListCreateView, RolePositionMatchView,
                     RoleProfileView, RoleMatchView, PositionCompetenciesFromRolesView,
                     PositionProfileListCreateView, PositionProfileUpdateDeleteView,
-                    AddToReserveView, RemoveFromReserveView, PositionCandidatesView)
+                    AddToReserveView, RemoveFromReserveView, PositionCandidatesView,
+                    PositionRolesView)
 
 urlpatterns = [
     path('me/', CurrentUserView.as_view(), name='current_user'),
@@ -30,6 +31,7 @@ urlpatterns = [
     path('positions/<int:position_id>/profile/', PositionProfileListCreateView.as_view(), name='position_profile_list'),
     path('positions/<int:position_id>/profile/<int:pk>/', PositionProfileUpdateDeleteView.as_view(), name='position_profile_detail'),
     path('positions/<int:position_id>/candidates/', PositionCandidatesView.as_view(), name='position_candidates'),
+    path('positions/<int:position_id>/roles/', PositionRolesView.as_view(), name='position_roles'),
 
     path('employees/<int:employee_id>/reserve/add/', AddToReserveView.as_view(), name='add_to_reserve'),
     path('employees/<int:employee_id>/reserve/remove/', RemoveFromReserveView.as_view(), name='remove_from_reserve'),

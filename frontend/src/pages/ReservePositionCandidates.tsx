@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, NavigateFunction  } from 'react-router-dom';
+import { useParams, useNavigate, NavigateFunction } from 'react-router-dom';
 import { ArrowLeft, Search, SlidersHorizontal, TrendingUp, TrendingDown, Award, Trash2, BarChart3, UserCheck } from 'lucide-react';
 import api from '../api/axios';
 
@@ -8,10 +8,11 @@ interface Candidate {
   full_name: string;
   current_position_name: string;
   department_name: string;
-  match_index: number; 
+  match_index: number;
   dynamics_score: number;
   priority: number;
   target_position_name: string;
+  target_role_id?: number | null;
 }
 
 export default function ReservePositionCandidates() {
@@ -35,10 +36,10 @@ export default function ReservePositionCandidates() {
         setCandidates(res.data.candidates || []);
       } catch (err: unknown) {
         if (err && typeof err === 'object' && 'response' in err) {
-             const axiosError = err as { response: { data?: { detail?: string } } };
-             setError(axiosError.response.data?.detail || 'Ошибка загрузки данных');
+          const axiosError = err as { response: { data?: { detail?: string } } };
+          setError(axiosError.response.data?.detail || 'Ошибка загрузки данных');
         } else {
-            setError('Ошибка загрузки данных');
+          setError('Ошибка загрузки данных');
         }
       } finally {
         setLoading(false);
@@ -126,13 +127,17 @@ export default function ReservePositionCandidates() {
         {filteredAndSorted.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {filteredAndSorted.map((candidate) => (
-              <CandidateCard key={candidate.employee_id} candidate={candidate} navigate={navigate} />
+              <CandidateCard 
+                key={candidate.employee_id} 
+                candidate={candidate} 
+                navigate={navigate} 
+              />
             ))}
           </div>
         ) : (
           <div className="text-center py-32 bg-white rounded-[3rem] border border-slate-100">
-             <div className="text-slate-200 flex justify-center mb-4"><Search size={64} /></div>
-             <p className="text-slate-400 text-xl font-medium">Никто не соответствует критериям поиска</p>
+            <div className="text-slate-200 flex justify-center mb-4"><Search size={64} /></div>
+            <p className="text-slate-400 text-xl font-medium">Никто не соответствует критериям поиска</p>
           </div>
         )}
       </div>
@@ -140,7 +145,7 @@ export default function ReservePositionCandidates() {
   );
 }
 
-function CandidateCard({ candidate, navigate }: { candidate: Candidate, navigate: NavigateFunction }) {
+function CandidateCard({ candidate, navigate }: { candidate: Candidate; navigate: NavigateFunction }) {
   const isPositive = candidate.dynamics_score >= 0;
   const statusColor = candidate.match_index >= 80 ? 'emerald' : candidate.match_index >= 60 ? 'amber' : 'rose';
   const colors = {
@@ -209,7 +214,13 @@ function CandidateCard({ candidate, navigate }: { candidate: Candidate, navigate
 
       <div className="flex gap-3">
         <button
-          onClick={() => navigate(`/hr/match/role/${candidate.employee_id}/1`)}
+          onClick={() => {
+            if (candidate.target_role_id) {
+              navigate(`/hr/match/role/${candidate.employee_id}/${candidate.target_role_id}`)
+            } else {
+              alert('Для этого кандидата не выбрана целевая роль. Откройте карточку сотрудника и укажите роль');
+            }
+          }}
           className="flex-[3] flex items-center justify-center gap-2 bg-slate-900 hover:bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-slate-200"
         >
           <BarChart3 size={18} />
@@ -235,4 +246,3 @@ function LoadingState() {
     </div>
   );
 }
-
