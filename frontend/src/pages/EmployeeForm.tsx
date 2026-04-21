@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { User, Lock, Briefcase, Calendar as CalendarIcon, ChevronRight, Save, X, AlertCircle, Loader2, CheckCircle2, Shield } from 'lucide-react';
 import api from '../api/axios';
-import axios from 'axios';
 
 interface Position { id: number; name: string; department_id: number; }
 interface Department { id: number; name: string; }
@@ -47,7 +46,6 @@ export default function EmployeeForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // --- ЛОГИКА ЗАКРЫТИЯ СПИСКОВ ПРИ КЛИКЕ ВНЕ ---
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (deptRef.current && !deptRef.current.contains(event.target as Node)) {
@@ -61,7 +59,6 @@ export default function EmployeeForm() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // --- ЗАГРУЗКА ДАННЫХ ---
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -105,42 +102,45 @@ export default function EmployeeForm() {
     return dictionaries.positions.filter(p => !form.department_id || p.department_id === Number(form.department_id));
   }, [dictionaries.positions, form.department_id]);
 
-  // --- СОХРАНЕНИЕ ---
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.department_id || !form.position_id) {
-      setError('Выберите отдел и должность из списка');
-      return;
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!form.department_id || !form.position_id) {
+    setError('Выберите отдел и должность из списка');
+    return;
+  }
+
+  setError('');
+  setIsSaving(true);
+
+  try {
+    const payload = {
+      full_name: form.full_name,
+      department_id: Number(form.department_id),
+      position_id: Number(form.position_id),
+      status: form.status,
+      role: form.system_role, 
+      system_role: form.system_role,
+    };
+
+    if (isEdit) {
+      await api.patch(`employees/${id}/update/`, payload);
+    } else {
+      const createPayload = {
+        ...payload,
+        username: form.username,
+        password: form.password,
+        hire_date: form.hire_date
+      };
+      await api.post('employees/create/', createPayload);
     }
-
-    setError('');
-    setIsSaving(true);
-
-    try {
-      const formCopy = { ...form };
-      const payload = formCopy as Record<string, unknown>;
-
-      if (isEdit) {
-        delete payload.username;
-        delete payload.hire_date;
-        delete payload.password;
-        await api.put(`employees/${id}/update/`, payload);
-      } else {
-        await api.post('employees/create/', payload);
-      }
-
-      setSuccess(true);
-      setTimeout(() => navigate('/employees'), 1500);
-    } catch (err) {
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.detail || 'Ошибка при сохранении');
-      } else {
-        setError('Произошла непредвиденная ошибка');
-      }
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    setSuccess(true);
+    setTimeout(() => navigate('/employees'), 1500);
+  } catch {
+    setError("Ошибка при сохранении");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   if (isLoading) return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">

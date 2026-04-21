@@ -23,7 +23,7 @@ export default function Dashboard() {
             <h1 className="text-xl font-black tracking-tight text-slate-900">HR.Portal</h1>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Online</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">В сети</span>
             </div>
           </div>
         </div>

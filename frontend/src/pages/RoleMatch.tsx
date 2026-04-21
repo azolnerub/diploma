@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronUp, AlertTriangle, Info, Layers, Zap} from 'lucide-react';
+import { ArrowLeft, ChevronDown, AlertTriangle, Info, Layers, Zap } from 'lucide-react';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api/axios';
 
 interface BreakdownItem {
@@ -34,6 +35,8 @@ interface RoleMatchData {
 }
 
 interface PositionAccordionProps {
+  employeeId: string;
+  roleId: string;
   pos: PositionMatch;
   details: BreakdownItem[] | undefined;
   isExpanded: boolean;
@@ -55,7 +58,7 @@ export default function RoleMatch() {
       try {
         const res = await api.get<RoleMatchData>(`employees/${employee_id}/match/role/${role_id}/`);
         setData(res.data);
-      } catch (err: unknown) { // ✅ Заменили any на unknown
+      } catch (err: unknown) {
         if (err && typeof err === 'object' && 'response' in err) {
           const axiosError = err as { response: { data?: { detail?: string } } };
           setError(axiosError.response.data?.detail || 'Ошибка загрузки анализа');
@@ -69,7 +72,6 @@ export default function RoleMatch() {
     fetchData();
   }, [employee_id, role_id]);
 
-
   const togglePosition = async (positionId: number) => {
     if (expandedPosition === positionId) {
       setExpandedPosition(null);
@@ -80,7 +82,9 @@ export default function RoleMatch() {
       try {
         const res = await api.get(`employees/${employee_id}/match/role/${role_id}/position/${positionId}/`);
         setPositionDetails(prev => ({ ...prev, [positionId]: res.data.breakdown || [] }));
-      } catch (err) { console.error(err); }
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -106,7 +110,6 @@ export default function RoleMatch() {
           
           <div className="relative bg-slate-900 p-10 md:p-14 overflow-hidden text-white">
             <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-indigo-500/20 to-transparent pointer-events-none" />
-            
             <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
               <div>
                 <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
@@ -140,7 +143,7 @@ export default function RoleMatch() {
                 <h3 className="font-black text-amber-900 text-sm uppercase tracking-wider">Приоритетные зоны развития:</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {data.recommendations.map((rec: Recommendation, i: number) => (
+                {data.recommendations.map((rec, i) => (
                   <div key={i} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-amber-200 shadow-sm">
                     <AlertTriangle className="text-amber-500 shrink-0" size={18} />
                     <span className="text-sm font-semibold text-slate-700">
@@ -158,13 +161,15 @@ export default function RoleMatch() {
           <div className="p-8 md:p-14">
             <h2 className="text-2xl font-black text-slate-900 mb-8 flex items-center gap-3">
               <Layers className="text-indigo-600" />
-                Составляющие должности
+              Составляющие должности
             </h2>
             
             <div className="grid grid-cols-1 gap-6">
               {data.positions.map((pos) => (
                 <PositionAccordion 
-                  key={pos.position_id} 
+                  key={pos.position_id}
+                  employeeId={employee_id!}
+                  roleId={role_id!}
                   pos={pos} 
                   details={positionDetails[pos.position_id]}
                   isExpanded={expandedPosition === pos.position_id}
@@ -180,22 +185,32 @@ export default function RoleMatch() {
 }
 
 function PositionAccordion({ pos, details, isExpanded, onToggle }: PositionAccordionProps) {
+  const radarData = useMemo(() => {
+    if (!details) return [];
+    return details.map(item => ({
+      subject: item.competency_name,
+      current: item.current,
+      required: item.required,
+      fullMark: 5,
+    }));
+  }, [details]);
+
   return (
     <div className={`
-      border rounded-[2rem] transition-all duration-300 overflow-hidden
-      ${isExpanded ? 'border-indigo-200 bg-indigo-50/20' : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'}
+      border rounded-[2.5rem] transition-all duration-500 overflow-hidden
+      ${isExpanded ? 'border-indigo-200 bg-indigo-50/30' : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'}
     `}>
       <div 
         onClick={onToggle}
         className="p-6 md:p-8 flex flex-col md:flex-row justify-between items-center cursor-pointer gap-6"
       >
         <div className="flex items-center gap-5 w-full md:w-auto">
-          <div className={`p-4 rounded-2xl ${isExpanded ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'} transition-colors`}>
+          <div className={`p-4 rounded-2xl ${isExpanded ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'} transition-all duration-300 shadow-sm`}>
             <Info size={24} />
           </div>
           <div>
             <h3 className="text-xl font-black text-slate-900">{pos.position_name}</h3>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Анализ соответствия</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Анализ компетенций</span>
           </div>
         </div>
 
@@ -203,16 +218,64 @@ function PositionAccordion({ pos, details, isExpanded, onToggle }: PositionAccor
           <div className="text-right">
             <span className="text-4xl font-black text-indigo-600">{pos.match_index}%</span>
           </div>
-          <div className={`p-2 rounded-full ${isExpanded ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
-            {isExpanded ? <ChevronUp size={24} /> : <ChevronDown size={24} />}
+          <div className={`p-2 rounded-full transition-transform duration-300 ${isExpanded ? 'bg-indigo-100 text-indigo-600 rotate-180' : 'bg-slate-200 text-slate-500'}`}>
+            <ChevronDown size={24} />
           </div>
         </div>
       </div>
 
       {isExpanded && (
-        <div className="px-6 pb-8 md:px-8 md:pb-10 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {details?.map((item: BreakdownItem, i: number) => (
+        <div className="px-6 pb-10 md:px-10 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="mb-10 bg-white rounded-[2rem] p-8 border border-indigo-50 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+               <div className="flex gap-4">
+                  <div className="flex items-center gap-2">
+                     <div className="w-3 h-3 rounded-full bg-green-500" />
+                     <span className="text-[10px] font-bold text-slate-500 uppercase">Текущий</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                     <div className="w-3 h-3 rounded-full bg-indigo-500" />
+                     <span className="text-[10px] font-bold text-slate-500 uppercase">Требуемый</span>
+                  </div>
+               </div>
+            </div>
+            
+            <div className="h-[400px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                  <PolarGrid stroke="#e2e8f0" />
+                  <PolarAngleAxis 
+                    dataKey="subject" 
+                    tick={{ fill: '#6a7481', fontSize: 11, fontWeight: 700 }}
+                  />
+                  <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                  
+                  <Tooltip 
+                    contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  />
+                  
+                  <Radar
+                    name="Требуемый уровень"
+                    dataKey="required"
+                    stroke="#6366f1"
+                    fill="#6366f1"
+                    fillOpacity={0.1}
+                  />
+                  
+                  <Radar
+                    name="Текущий уровень"
+                    dataKey="current"
+                    stroke="#32CD32"
+                    fill="#32CD32"
+                    fillOpacity={0.4}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {details?.map((item, i) => (
               <CompetencyDetailCard key={i} item={item} />
             ))}
           </div>
@@ -226,34 +289,40 @@ function CompetencyDetailCard({ item }: { item: BreakdownItem }) {
   const isDanger = item.ratio < 60;
   return (
     <div className={`
-      p-5 rounded-2xl border transition-all
-      ${item.is_key ? 'border-rose-200 bg-rose-50/50' : 'border-white bg-white shadow-sm'}
+      p-6 rounded-[1.5rem] border transition-all duration-300
+      ${item.is_key ? 'border-rose-100 bg-rose-50/30' : 'border-white bg-white shadow-sm hover:shadow-md'}
     `}>
-      <div className="flex justify-between items-start mb-4">
-        <div className="flex flex-col gap-1">
-          <span className="font-black text-slate-900 text-sm leading-tight">{item.competency_name}</span>
-          <div className="flex items-center gap-2 mt-1">
-            {item.is_key && (
-              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-rose-600 text-white animate-pulse">
-                Ключевая
-              </span>
-            )}
-          </div>
+      <div className="flex justify-between items-start mb-6">
+        <div className="flex flex-col gap-2">
+          <span className="font-black text-slate-900 text-sm leading-tight uppercase tracking-tight">
+            {item.competency_name}
+          </span>
+          {item.is_key && (
+            <span className="w-fit text-[8px] font-black uppercase px-2 py-0.5 rounded bg-rose-600 text-white">
+              Ключевая
+            </span>
+          )}
         </div>
-        <div className={`text-xl font-black ${isDanger ? 'text-rose-600' : 'text-emerald-600'}`}>
+        <div className={`text-2xl font-black ${isDanger ? 'text-rose-600' : 'text-emerald-600'}`}>
           {Math.round(item.ratio)}%
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-          <span>{item.current} Текущий</span>
-          <span>{item.required} Требуемый</span>
+      <div className="space-y-4">
+        <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          <div className="flex flex-col">
+             <span className="text-slate-900 text-sm">{item.current}</span>
+             <span>Текущий</span>
+          </div>
+          <div className="flex flex-col text-right">
+             <span className="text-indigo-600 text-sm">{item.required}</span>
+             <span>Требуемый</span>
+          </div>
         </div>
-        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
           <div 
             className={`h-full rounded-full transition-all duration-1000 ${isDanger ? 'bg-rose-500' : 'bg-emerald-500'}`}
-            style={{ width: `${item.ratio}%` }}
+            style={{ width: `${Math.min(item.ratio, 100)}%` }}
           />
         </div>
       </div>
@@ -264,8 +333,15 @@ function CompetencyDetailCard({ item }: { item: BreakdownItem }) {
 function AnalysisLoader() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-white">
-      <div className="w-20 h-20 border-8 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-6" />
-      <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Загрузка анализа...</h2>
+      <div className="relative">
+         <div className="w-24 h-24 border-8 border-slate-100 border-t-indigo-600 rounded-full animate-spin" />
+         <div className="absolute inset-0 flex items-center justify-center">
+            <Zap className="text-indigo-600 animate-pulse" size={32} />
+         </div>
+      </div>
+      <h2 className="mt-8 text-xs font-black text-slate-400 uppercase tracking-[0.4em] animate-pulse">
+        Глубокий анализ данных...
+      </h2>
     </div>
   );
 }

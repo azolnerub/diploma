@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Briefcase, Users, Target, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Briefcase, Users, Target, ChevronRight, Search, Filter } from 'lucide-react';
 import api from '../api/axios';
 
 interface PositionWithCandidates {
   id: number;
   name: string;
   department_name: string;
+  department_id: number;
   candidate_count: number;
   avg_match: number;
 }
@@ -15,47 +16,69 @@ interface RawPositionResponse {
   id: number;
   name: string;
   department_name?: string;
-  department?: { name: string };
+  department_id?: number;
+  candidate?: { name: string };
   candidate_count?: number;
   avg_match?: number;
 }
 
+interface Department {
+  id: number;
+  name: string;
+}
 
 export default function ReservePositionsList() {
   const navigate = useNavigate();
   const [positions, setPositions] = useState<PositionWithCandidates[]>([]);
+  const [allDepartments, setAllDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDept, setSelectedDept] = useState<string>('');
+
   useEffect(() => {
-    const fetchPositions = async () => {
+    const fetchData = async () => {
       try {
-        const res = await api.get<RawPositionResponse[]>('/positions/');
-        const formatted: PositionWithCandidates[] = res.data.map((p) => ({
+        const [posRes, deptRes] = await Promise.all([
+          api.get<RawPositionResponse[]>('/positions/'),
+          api.get<Department[]>('/departments/')
+        ]);
+
+        const formatted: PositionWithCandidates[] = posRes.data.map((p) => ({
           id: p.id,
           name: p.name,
-          department_name: p.department_name || p.department?.name || 'Общий отдел',
+          department_id: p.department_id || 0,
+          department_name: p.department_name || 'Общий отдел',
           candidate_count: p.candidate_count || 0,
           avg_match: Math.round(p.avg_match || 0)
         }));
+
         setPositions(formatted);
-      } catch (err: unknown) {
+        setAllDepartments(deptRes.data);
+      } catch (err) {
         console.error(err);
-        setError('Не удалось загрузить список вакансий. Попробуйте обновить страницу.');
+        setError('Не удалось загрузить данные. Проверьте соединение с сервером.');
       } finally {
         setLoading(false);
       }
     };
-    fetchPositions();
+    fetchData();
   }, []);
+
+  const filteredPositions = useMemo(() => {
+    return positions.filter(pos => {
+      const matchesSearch = pos.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesDept = !selectedDept || pos.department_id === Number(selectedDept);
+      return matchesSearch && matchesDept;
+    });
+  }, [searchTerm, selectedDept, positions]);
 
   if (error) return <ErrorState message={error} />;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20">
       <div className="max-w-7xl mx-auto p-6 md:p-10">
-        
-        {/* Navigation */}
         <button 
           onClick={() => navigate('/reserve')} 
           className="group mb-8 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors"
@@ -64,7 +87,6 @@ export default function ReservePositionsList() {
           Назад в кадровый резерв
         </button>
 
-        {/* Header */}
         <header className="mb-12">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
@@ -75,30 +97,54 @@ export default function ReservePositionsList() {
             </h1>
           </div>
           <p className="text-lg text-slate-500 max-w-2xl">
-            Управляйте потенциалом компании: анализируйте кандидатов и отслеживайте соответствие должностям.
+            Управляйте потенциалом компании: анализируйте кандидатов и отслеживайте соответствие.
           </p>
         </header>
 
-        {/* Content */}
+        <div className="flex flex-col md:flex-row gap-4 mb-10">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input 
+              type="text"
+              placeholder="Поиск по названию должности..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all font-medium text-slate-700 shadow-sm"
+            />
+          </div>
+          
+          <div className="relative min-w-[240px]">
+            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <select 
+              value={selectedDept}
+              onChange={(e) => setSelectedDept(e.target.value)}
+              className="w-full pl-12 pr-10 py-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 appearance-none font-medium text-slate-700 shadow-sm cursor-pointer"
+            >
+              <option value="">Все отделы</option>
+              {allDepartments.map(dept => (
+                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
-        ) : positions.length > 0 ? (
+        ) : filteredPositions.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {positions.map(pos => (
+            {filteredPositions.map(pos => (
               <PositionCard key={pos.id} pos={pos} onClick={() => navigate(`/hr/reserve/position/${pos.id}`)} />
             ))}
           </div>
         ) : (
-          <EmptyState />
+          <EmptyState isFiltering={searchTerm !== '' || selectedDept !== ''} />
         )}
       </div>
     </div>
   );
 }
-
-// --- Sub-components ---
 
 function PositionCard({ pos, onClick }: { pos: PositionWithCandidates, onClick: () => void }) {
   return (
@@ -106,7 +152,6 @@ function PositionCard({ pos, onClick }: { pos: PositionWithCandidates, onClick: 
       onClick={onClick}
       className="group relative bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
     >
-      {/* Декоративный элемент фона */}
       <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
         <Briefcase size={80} />
       </div>
@@ -167,14 +212,20 @@ function SkeletonCard() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ isFiltering }: { isFiltering?: boolean }) {
   return (
     <div className="text-center py-40 bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
       <div className="inline-flex p-6 bg-slate-50 rounded-full text-slate-300 mb-6">
-        <Briefcase size={48} />
+        {isFiltering ? <Search size={48} /> : <Briefcase size={48} />}
       </div>
-      <h2 className="text-2xl font-bold text-slate-900 mb-2">Вакансий пока нет</h2>
-      <p className="text-slate-500">Добавьте целевые должности для формирования резерва</p>
+      <h2 className="text-2xl font-bold text-slate-900 mb-2">
+        {isFiltering ? 'Ничего не найдено' : 'Вакансий пока нет'}
+      </h2>
+      <p className="text-slate-500">
+        {isFiltering 
+          ? 'Попробуйте изменить параметры фильтрации или поисковый запрос' 
+          : 'Добавьте целевые должности для формирования резерва'}
+      </p>
     </div>
   );
 }

@@ -110,14 +110,14 @@ class EmployeeUpdateView(generics.UpdateAPIView):
 
     def perform_update(self, serializer):
         instance = serializer.save()
-
         new_role = self.request.data.get('system_role')
+
         if new_role in ['employee', 'hr', 'manager']:
             user = instance.user
-            user.role = new_role
-            user.save()
+            if user:
+                user.role = new_role
+                user.save()
 
-        # Обновляем список компетенций, если он передан в запросе
         comp_ids = self.request.data.get('competency_ids')
         if comp_ids is not None:
             if isinstance(comp_ids, list):
@@ -622,7 +622,7 @@ class PositionCandidatesView(APIView):
                 "current_position_name": emp.position.name if emp.position else "—",
                 "department_name": emp.department.name if emp.department else "—",
                 "match_index": match_data.get('match_index', 0),
-                "dynamics_score": getattr(emp, 'dynamics_score', 0),
+                "dynamics_score": calculate_dynamics_score(emp),
                 "priority": r.priority,
                 "target_position_name": position.name,
                 "target_role_id": r.target_role.id if r.target_role else None,
