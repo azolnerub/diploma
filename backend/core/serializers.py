@@ -57,9 +57,9 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 class RoleSerializer(serializers.ModelSerializer):
-    positions = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-    department = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
-    department_name = serializers.CharField(source='department.name', read_only=True, allow_null=True)
+    positions = serializers.PrimaryKeyRelatedField(many=True, queryset=Position.objects.all(), required=False)
+    department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
+    department_name = serializers.CharField(source='department.name', read_only=True)
 
     class Meta:
         model = Role

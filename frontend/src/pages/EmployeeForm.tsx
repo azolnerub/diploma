@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { User, Lock, Briefcase, Calendar as CalendarIcon, ChevronRight, Save, X, AlertCircle, Loader2, CheckCircle2, Shield } from 'lucide-react';
+import { User, Lock, Briefcase, Calendar as CalendarIcon, ChevronRight, Save, AlertCircle, Loader2, CheckCircle2, Shield } from 'lucide-react';
 import api from '../api/axios';
 
 interface Position { id: number; name: string; department_id: number; }
@@ -161,9 +161,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             {isEdit ? 'Редактирование' : 'Новый сотрудник'}
           </h1>
         </div>
-        <button type="button" onClick={() => navigate(-1)} className="p-3 rounded-2xl border border-slate-200 text-slate-400 hover:bg-slate-50 transition-all">
-          <X size={20} />
-        </button>
+
       </header>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-20">
@@ -177,18 +175,18 @@ const handleSubmit = async (e: React.FormEvent) => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ФИО</label>
-                <input type="text" value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-600 outline-none transition-all font-bold text-slate-700 placeholder:text-slate-300" placeholder="Иванов Иван Иванович" required />
+                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ФИО</label>
+                <input type="text" value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} className="w-full px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-600 outline-none transition-all font-bold text-slate-700 placeholder:text-slate-300" placeholder="Иванов Иван Иванович" required />
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Логин</label>
-                <input type="text" value={form.username} onChange={e => setForm({...form, username: e.target.value})} disabled={isEdit} className={`w-full px-6 py-4 border rounded-2xl font-bold transition-all outline-none ${isEdit ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50 border-slate-200 focus:bg-white focus:border-indigo-600 text-slate-700'}`} required />
+                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Логин</label>
+                <input type="text" value={form.username} onChange={e => setForm({...form, username: e.target.value})} disabled={isEdit} className={`w-full px-4 py-4 border rounded-2xl font-bold transition-all outline-none ${isEdit ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50 border-slate-200 focus:bg-white focus:border-indigo-600 text-slate-700'}`} required />
               </div>
 
               {!isEdit && (
                 <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Пароль</label>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Пароль</label>
                   <div className="relative">
                     <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                     <input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-600 outline-none font-bold" placeholder="Минимум 6 символов" required />
@@ -198,7 +196,6 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
           </div>
 
-          {/* КАРТОЧКА: ОРГСТРУКТУРА */}
           <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100 space-y-8">
             <div className="flex items-center gap-4 pb-6 border-b border-slate-50">
               <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Briefcase size={20} /></div>

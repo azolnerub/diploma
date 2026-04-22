@@ -18,7 +18,6 @@ class Department(models.Model):
 class Position(models.Model):
     name = models.CharField(max_length=100, verbose_name="Название должности")
     department = models.ForeignKey(Department, on_delete=models.CASCADE)
-    roles = models.ManyToManyField('Role', blank=True, related_name='position_set')
     competencies = models.ManyToManyField('Competency', blank=True, related_name='positions')
 
     def __str__(self):
@@ -76,7 +75,7 @@ class Role(models.Model):
     description = models.TextField(blank=True, verbose_name="Описание роли")
     department = models.ForeignKey('Department', on_delete=models.CASCADE, related_name='roles', null=True, blank=True)
     default_missing_level = models.PositiveIntegerField(default=20, verbose_name="Уровень по умолчанию при отсутствии оценки (0-100)")
-    positions = models.ManyToManyField('Position', blank=True, related_name='role_set')
+    positions = models.ManyToManyField('Position', blank=True, related_name='roles')
 
     def __str__(self):
         return self.name

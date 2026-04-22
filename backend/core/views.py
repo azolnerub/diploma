@@ -150,12 +150,17 @@ class DepartmentListView(generics.ListAPIView):
 
 # Должности
 class PositionListView(generics.ListAPIView):
-    queryset = Position.objects.all()
     serializer_class = PosSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Position.objects.annotate(candidate_count=Count('reserve'))
+        queryset = Position.objects.annotate(candidate_count=Count('reserve'))
+        user = self.request.user
+
+        if user.role == 'manager' and hasattr(user, 'employee'):
+            queryset = queryset.filter(department=user.employee.department)
+
+        return queryset
 
 # Компетенции
 class CompetencyListView(generics.ListCreateAPIView):
@@ -318,14 +323,12 @@ class EmployeeDynamicsView(generics.ListAPIView):
 
 # === РАСЧЁТ СООТВЕТСТВИЯ СОТРУДНИКА ЦЕЛЕВОЙ ДОЛЖНОСТИ ===
 def calculate_position_match(employee, position_id, role_id=None):
-    """Расчёт соответствия сотрудника должности"""
     try:
         position = Position.objects.get(pk=position_id)
     except Position.DoesNotExist:
         return {"match_index": 0, "breakdown": [], "error": "Должность не найдена"}
 
     evaluations = {e.competency_id: e.value for e in Evaluation.objects.filter(employee=employee)}
-
     requirements = []
 
     # 1. Приоритет — PositionProfile (то, что задал HR)
@@ -340,8 +343,7 @@ def calculate_position_match(employee, position_id, role_id=None):
 
     # 2. Если PositionProfile пустой — агрегируем из всех ролей (MAX уровень)
     if not requirements:
-        competency_map = {}  # competency_id → max required_level, max weight, is_key
-
+        competency_map = {}
         for role in position.roles.all():
             for rp in role.profile.all().select_related('competency'):
                 cid = rp.competency_id
@@ -491,6 +493,52 @@ class RoleProfileView(APIView):
             "role_description": role.description,
             "profiles": serializer.data
         })
+    def post(self, request, role_id):
+        role = get_object_or_404(Role, id=role_id)
+
+        # 1. Обработка списка (массива)
+        if isinstance(request.data, list):
+            # Собираем ID, чтобы знать, что оставить
+            incoming_comp_ids = [item.get('competency') for item in request.data if item.get('competency')]
+
+            # Удаляем те записи, которых нет в новом списке (синхронизация)
+            RoleProfile.objects.filter(role=role).exclude(competency_id__in=incoming_comp_ids).delete()
+
+            results_count = 0
+            for item in request.data:
+                comp_id = item.get('competency')
+                if not comp_id:
+                    continue
+
+                RoleProfile.objects.update_or_create(
+                    role=role,
+                    competency_id=comp_id,
+                    defaults={
+                        'required_level': item.get('required_level', 60),
+                        'weight': item.get('weight', 0.15),
+                        'is_key': item.get('is_key', False)
+                    }
+                )
+                results_count += 1
+
+            # ВАЖНО: return находится ВНЕ цикла for
+            return Response({"status": "success", "updated_count": results_count}, status=201)
+
+        # 2. Обработка одиночного объекта
+        elif isinstance(request.data, dict) and request.data.get('competency'):
+            profile, _ = RoleProfile.objects.update_or_create(
+                role=role,
+                competency_id=request.data.get('competency'),
+                defaults={
+                    'required_level': request.data.get('required_level', 60),
+                    'weight': request.data.get('weight', 0.15),
+                    'is_key': request.data.get('is_key', False)
+                }
+            )
+            return Response(RoleProfileSerializer(profile).data, status=201)
+
+        # 3. Если данные пришли в непонятном формате
+        return Response({"error": "Invalid data format"}, status=400)
 
 class RoleMatchView(APIView):
     permission_classes = [IsAuthenticated]
@@ -558,6 +606,11 @@ class PositionProfileUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PositionProfileSerializer
     permission_classes = [IsAuthenticated]
 
+class RoleDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Role.objects.all()
+    serializer_class = RoleSerializer
+    permission_classes = [IsAuthenticated]
+
 class AddToReserveView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -603,7 +656,11 @@ class PositionCandidatesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, position_id):
-        position = get_object_or_404(Position, pk=position_id)
+        user = request.user
+        if user.role == 'manager' and hasattr(user, 'employee'):
+            position = get_object_or_404(Position, pk=position_id, department=user.employee.department)
+        else:
+            position = get_object_or_404(Position, pk=position_id)
 
         reserves = Reserve.objects.filter(
             position=position
@@ -641,6 +698,5 @@ class PositionRolesView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        position_id = self.kwargs['position_id']
-        position = get_object_or_404(Position, pk=position_id)
+        position = get_object_or_404(Position, pk=self.kwargs['position_id'])
         return position.roles.all()
