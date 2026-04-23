@@ -12,13 +12,16 @@ import RoleMatch from './pages/RoleMatch';
 import RoleBuilder from './pages/RoleBuilder';
 import ReservePositionCandidates from './pages/ReservePositionCandidates';
 import ReservePositionsList from './pages/ReservePositionsList';
+import UserProfile from './pages/UserProfile';
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<Login/>}/>
+        <Route path="/profile" element={<UserProfile/>}/>
         <Route path="/dashboard" element={<Dashboard/>}/>
+        <Route path="/" element={<Navigate to="/profile" replace/>}/>
         <Route path="/employees" element={<Employees/>}/>
         <Route path="/hr" element={<HRPanel/>}/>
         <Route path="/hr/edit/:id" element={<EmployeeForm/>}/>

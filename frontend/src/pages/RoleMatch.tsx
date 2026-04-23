@@ -56,9 +56,12 @@ export default function RoleMatch() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        console.log("ОТПРАВКА ЗАПРОСА:", { employee_id, role_id });
         const res = await api.get<RoleMatchData>(`employees/${employee_id}/match/role/${role_id}/`);
+        console.log("ДАННЫЕ ОТ СЕРВЕРА (RESPONSE):", res.data);
         setData(res.data);
       } catch (err: unknown) {
+        console.error("ОШИБКА API:", err);
         if (err && typeof err === 'object' && 'response' in err) {
           const axiosError = err as { response: { data?: { detail?: string } } };
           setError(axiosError.response.data?.detail || 'Ошибка загрузки анализа');

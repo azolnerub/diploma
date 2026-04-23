@@ -8,11 +8,12 @@ from .views import (CurrentUserView, EmployeeListView, EmployeeCreateView, Emplo
                     RoleProfileView, RoleMatchView, PositionCompetenciesFromRolesView,
                     PositionProfileListCreateView, PositionProfileUpdateDeleteView,
                     AddToReserveView, RemoveFromReserveView, PositionCandidatesView,
-                    PositionRolesView, RoleDetailView)
+                    PositionRolesView, RoleDetailView, UserFullProfileView)
 
 urlpatterns = [
     path('me/', CurrentUserView.as_view(), name='current_user'),
     path('employees/', EmployeeListView.as_view(), name='employee_list'),
+    path('employees/me/profile_full/', UserFullProfileView.as_view()),
     path('employees/create/', EmployeeCreateView.as_view(), name='employee_create'),
     path('employees/<int:pk>/update/', EmployeeUpdateView.as_view(), name='employee_update'),
     path('employees/<int:pk>/delete/', EmployeeDeleteView.as_view(), name='employee_delete'),

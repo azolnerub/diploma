@@ -1,5 +1,7 @@
 from rest_framework import generics, status
-from django.db.models import Count
+from django.db.models import Count, Avg
+from datetime import timedelta
+from django.utils import timezone
 from rest_framework.views import APIView
 from django.contrib.auth.models import User
 from rest_framework.response import Response
@@ -263,9 +265,13 @@ class PositionCompetenciesUpdateView(APIView):
             "competency_count": len(competency_ids)
         }, status=200)
 
-def calculate_dynamics_score(employee):
-    evaluations = Evaluation.objects.filter(employee=employee) \
-        .order_by('date', 'competency_id')
+def calculate_dynamics_score(employee, date_to=None):
+    evaluations_qs = Evaluation.objects.filter(employee=employee)
+
+    if date_to:
+        evaluations_qs = evaluations_qs.filter(date__lte=date_to)
+
+    evaluations = evaluations_qs.order_by('date', 'competency_id')
 
     if evaluations.count() < 2:
         return 0.0
@@ -285,12 +291,10 @@ def calculate_dynamics_score(employee):
 
         changes = [values[i] - values[i - 1] for i in range(1, len(values))]
 
-        # Более чувствительные веса: последние изменения имеют значительно больший вес
         n = len(changes)
         if n == 1:
             weights = [1.0]
         else:
-            # Последнее изменение — самый большой вес
             weights = [0.1 * (i + 1) for i in range(n)]
             weight_sum = sum(weights)
             weights = [w / weight_sum for w in weights]
@@ -302,7 +306,6 @@ def calculate_dynamics_score(employee):
 
     final_score = total_score / comp_count if comp_count > 0 else 0.0
 
-    # Округляем до одного знака после запятой
     return round(final_score, 1)
 
 class EmployeeDynamicsView(generics.ListAPIView):
@@ -700,3 +703,113 @@ class PositionRolesView(generics.ListAPIView):
     def get_queryset(self):
         position = get_object_or_404(Position, pk=self.kwargs['position_id'])
         return position.roles.all()
+
+class UserFullProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        employee = get_object_or_404(Employee, user=request.user)
+
+        # 1. Радар (Текущее соответствие)
+        current_match = calculate_position_match(employee, employee.position_id)
+        radar_data = [{
+            "subject": b['competency_name'],
+            "cur": b['current'],
+            "req": b['required']
+        } for b in current_match.get('breakdown', [])]
+
+        # 2. Траектории
+        other_positions = Position.objects.filter(
+            department=employee.department
+        ).exclude(id=employee.position_id)[:4]
+
+        trajectories = []
+        for pos in other_positions:
+            role = pos.roles.first()
+
+            # Определяем, какую функцию использовать и как достать индекс
+            if role:
+                res_data = calculate_role_match(employee, role.id)
+                match_val = res_data.get('role_match_index', 0)
+                role_id_val = role.id
+            else:
+                res_data = calculate_position_match(employee, pos.id)
+                match_val = res_data.get('match_index', 0)
+                role_id_val = None
+
+            # Формируем Gaps строго под запрос фронтенда
+            raw_breakdown = res_data.get('breakdown', [])
+            gaps = []
+            for b in raw_breakdown:
+                if b['current'] < b['required']:
+                    gaps.append({
+                        "competency_name": b['competency_name'],
+                        "current": float(b['current']),
+                        "required": float(b['required'])
+                    })
+
+            trajectories.append({
+                "pos_id": pos.id,
+                "role_id": role_id_val,
+                "pos_name": pos.name,
+                "match_percent": match_val,
+                "gap": gaps[:2] # Берем только первые два проблемных места
+            })
+
+        # 3. История (Динамика)
+        history = []
+        today = timezone.now().date()
+        for i in range(5, -1, -1):
+            target_date = today - timedelta(days=i*30)
+            # ВАЖНО: убедитесь, что calculate_dynamics_score принимает date_to
+            val = calculate_dynamics_score(employee, date_to=target_date)
+            history.append({
+                "date": target_date.strftime("%b"),
+                "value": val,
+                "diff": 0
+            })
+
+        # 4. Прогресс и Динамика
+        personal_dynamic = calculate_dynamics_score(employee)
+        dept_employees = Employee.objects.filter(department=employee.department)
+        dept_scores = [calculate_dynamics_score(emp) for emp in dept_employees]
+        dept_avg_growth = sum(dept_scores) / len(dept_scores) if dept_scores else 0
+
+        # 5. Резерв
+        reserve_obj = Reserve.objects.filter(employee=employee).first()
+        reserve_data = None
+        if reserve_obj:
+            res_reserve = calculate_position_match(employee, reserve_obj.position_id)
+            reserve_data = {
+                "target_name": reserve_obj.position.name,
+                "ready_percent": res_reserve.get('match_index', 0)
+            }
+
+        # 6. Обратная связь
+        feedback_list = []
+        eval_dates = Evaluation.objects.filter(
+            employee=employee
+        ).values_list('date', flat=True).distinct().order_by('-date')[:3]
+
+        for d in eval_dates:
+            items = Evaluation.objects.filter(employee=employee, date=d)
+            if items.exists():
+                mgr = items.first().manager
+                mgr_emp = Employee.objects.filter(user=mgr).first()
+                feedback_list.append({
+                    "date": d.strftime("%d.%m.%Y"),
+                    "manager": mgr_emp.full_name if mgr_emp else mgr.username,
+                    "details": [{"comp": i.competency.name, "val": i.value, "comm": i.comment} for i in items]
+                })
+
+        return Response({
+            "radar_data": radar_data,
+            "trajectories": trajectories,
+            "history": history,
+            "stats": {
+                "dept_growth": round(float(dept_avg_growth), 1),
+                "personal_growth": personal_dynamic
+            },
+            "reserve": reserve_data,
+            "feedback": feedback_list
+        })
