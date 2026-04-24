@@ -1,9 +1,6 @@
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, Trophy, BarChart3, Star, LogOut, 
-  LayoutDashboard, UserCircle 
-} from 'lucide-react';
+import { Users, Trophy, Star, LogOut, LayoutDashboard, UserCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, loading, logout } = useAuth();
@@ -12,12 +9,10 @@ export default function Dashboard() {
   if (loading) return <DashboardLoader />;
   if (!user) return null;
 
-  // Извлекаем имя для приветствия
   const firstName = user.full_name.split(' ')[1] || user.full_name.split(' ')[0];
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 selection:bg-indigo-100 font-sans">
-      {/* NAVIGATION */}
       <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/60">
         <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -52,7 +47,6 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      {/* MAIN CONTENT */}
       <main className="max-w-7xl mx-auto px-6 py-12">
         <header className="mb-12 relative">
           <div className="absolute -top-10 -left-10 w-40 h-40 bg-indigo-100/50 rounded-full blur-3xl -z-10" />
@@ -66,7 +60,6 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-[280px]">
           
-          {/* КАРТОЧКА: Управление сотрудниками */}
           <div
             onClick={() => navigate(user?.role === 'hr' ? '/hr' : '/employees')}
             className="md:col-span-8 bg-white border border-slate-200 rounded-[2.5rem] p-10 flex flex-col justify-between hover:shadow-2xl hover:shadow-indigo-500/5 hover:border-indigo-200 transition-all cursor-pointer group relative overflow-hidden"
@@ -87,7 +80,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* КАРТОЧКА: Личный профиль (Новая) */}
+          {/* Мой профиль */}
           <div
             onClick={() => navigate('/profile')}
             className="md:col-span-4 bg-white border border-slate-200 rounded-[2.5rem] p-10 hover:shadow-2xl hover:border-indigo-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden"
@@ -104,7 +97,7 @@ export default function Dashboard() {
              </div>
           </div>
 
-          {/* КАРТОЧКА: Оценки (Только для менеджеров) */}
+          {/* Оценки */}
           {user?.role === 'manager' && (
             <div
               onClick={() => navigate('/hr/evaluate')}
@@ -122,7 +115,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* КАРТОЧКА: Кадровый резерв */}
+          {/* Кадровый резерв */}
           <div
             onClick={() => navigate('/reserve')}
             className="md:col-span-4 bg-white border border-slate-200 rounded-[2.5rem] p-10 hover:shadow-2xl hover:border-emerald-200 transition-all cursor-pointer group flex flex-col justify-between"
@@ -135,18 +128,6 @@ export default function Dashboard() {
               <p className="text-slate-500 text-sm font-medium">Поиск и развитие будущих лидеров</p>
             </div>
           </div>
-
-          {/* КАРТОЧКА: Аналитика (Заглушка) */}
-          <div className="md:col-span-4 bg-white border border-slate-100 rounded-[2.5rem] p-10 flex flex-col justify-between opacity-50 grayscale hover:grayscale-0 transition-all duration-500 border-dashed">
-            <div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center">
-              <BarChart3 size={24} />
-            </div>
-            <div>
-              <h3 className="text-2xl font-black mb-1 text-slate-400">Аналитика</h3>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">В разработке...</p>
-            </div>
-          </div>
-
         </div>
       </main>
     </div>

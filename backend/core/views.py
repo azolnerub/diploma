@@ -1,7 +1,7 @@
 from rest_framework import generics, status
-from django.db.models import Count, Avg
-from datetime import timedelta
+from django.db.models import Count
 from django.utils import timezone
+from django.db.models.functions import TruncQuarter
 from rest_framework.views import APIView
 from django.contrib.auth.models import User
 from rest_framework.response import Response
@@ -627,8 +627,8 @@ class AddToReserveView(APIView):
 
         position = get_object_or_404(Position, pk=position_id)
 
-        if Reserve.objects.filter(employee=employee).exists():
-            return Response({"detail": "Сотрудник уже в кадровом резерве"}, status=400)
+        if Reserve.objects.filter(employee=employee, position=position).exists():
+            return Response({"detail": "Сотрудник уже в резерве на эту должность"}, status=400)
 
         reserve = Reserve.objects.create(
             employee=employee,
@@ -650,10 +650,16 @@ class RemoveFromReserveView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, employee_id):
-        deleted = Reserve.objects.filter(employee_id=employee_id).delete()
+        position_id = request.data.get('position_id') or request.query_params.get('position_id')
+
+        if not position_id:
+            return Response({"detail": "Не указана должность для удаления"}, status=400)
+
+        deleted = Reserve.objects.filter(employee_id=employee_id, position_id=position_id).delete()
+
         if deleted[0] > 0:
-            return Response({"message": "Сотрудник удалён из кадрового резерва"}, status=204)
-        return Response({"detail": "Сотрудник не найден в резерве"}, status=404)
+            return Response({"message": "Удалено из резерва"}, status=204)
+        return Response({"detail": "Запись не найдена"}, status=404)
 
 class PositionCandidatesView(APIView):
     permission_classes = [IsAuthenticated]
@@ -726,18 +732,10 @@ class UserFullProfileView(APIView):
         trajectories = []
         for pos in other_positions:
             role = pos.roles.first()
+            res_data = calculate_position_match(employee, pos.id)
+            match_val = res_data.get('match_index', 0)
+            role_id_val = role.id if role else None
 
-            # Определяем, какую функцию использовать и как достать индекс
-            if role:
-                res_data = calculate_role_match(employee, role.id)
-                match_val = res_data.get('role_match_index', 0)
-                role_id_val = role.id
-            else:
-                res_data = calculate_position_match(employee, pos.id)
-                match_val = res_data.get('match_index', 0)
-                role_id_val = None
-
-            # Формируем Gaps строго под запрос фронтенда
             raw_breakdown = res_data.get('breakdown', [])
             gaps = []
             for b in raw_breakdown:
@@ -752,21 +750,37 @@ class UserFullProfileView(APIView):
                 "pos_id": pos.id,
                 "role_id": role_id_val,
                 "pos_name": pos.name,
-                "match_percent": match_val,
+                "match_percent": round(float(match_val), 1),
                 "gap": gaps[:2] # Берем только первые два проблемных места
             })
 
         # 3. История (Динамика)
         history = []
         today = timezone.now().date()
+        current_year = today.year
+        current_q = (today.month - 1) // 3 + 1
+
         for i in range(5, -1, -1):
-            target_date = today - timedelta(days=i*30)
-            # ВАЖНО: убедитесь, что calculate_dynamics_score принимает date_to
-            val = calculate_dynamics_score(employee, date_to=target_date)
+            q_to_sub = i
+            target_q = current_q - q_to_sub
+            target_year = current_year
+
+            while target_q <= 0:
+                target_q += 4
+                target_year -= 1
+
+            q_end_months = [3, 6, 9, 12]
+            month = q_end_months[target_q - 1]
+
+            calc_date = timezone.datetime(target_year, month, 1).date()
+            if calc_date > today:
+                calc_date = today
+
+            val = calculate_dynamics_score(employee, date_to=calc_date)
+
             history.append({
-                "date": target_date.strftime("%b"),
+                "date": f"{target_year}-Q{target_q}",
                 "value": val,
-                "diff": 0
             })
 
         # 4. Прогресс и Динамика
@@ -787,22 +801,27 @@ class UserFullProfileView(APIView):
 
         # 6. Обратная связь
         feedback_list = []
-        eval_dates = Evaluation.objects.filter(
-            employee=employee
-        ).values_list('date', flat=True).distinct().order_by('-date')[:3]
+        evaluations = Evaluation.objects.filter(employee=employee
+        ).annotate(quarter_start=TruncQuarter('date')).order_by('-quarter_start')
 
-        for d in eval_dates:
-            items = Evaluation.objects.filter(employee=employee, date=d)
+        quarters = evaluations.values_list('quarter_start', flat=True).distinct()
+
+        for q_start in quarters[:3]:
+            items = evaluations.filter(quarter_start=q_start)
             if items.exists():
-                mgr = items.first().manager
+                latest_eval = items.latest('date')
+                mgr = latest_eval.manager
                 mgr_emp = Employee.objects.filter(user=mgr).first()
+                q_num = (q_start.month - 1) // 3 + 1
+                period_key = f"{q_start.year}-Q{q_num}"
                 feedback_list.append({
-                    "date": d.strftime("%d.%m.%Y"),
-                    "manager": mgr_emp.full_name if mgr_emp else mgr.username,
+                    "date": period_key,
+                    "manager": mgr_emp.full_name if mgr_emp else (mgr.username if mgr else "Система"),
                     "details": [{"comp": i.competency.name, "val": i.value, "comm": i.comment} for i in items]
                 })
 
         return Response({
+            "employee_id": employee.id,
             "radar_data": radar_data,
             "trajectories": trajectories,
             "history": history,
@@ -813,3 +832,39 @@ class UserFullProfileView(APIView):
             "reserve": reserve_data,
             "feedback": feedback_list
         })
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        current_password = request.data.get("current_password")
+        new_password = request.data.get("new_password")
+        confirm_password = request.data.get("confirm_password")
+
+        # 1. Проверка текущего пароля
+        if not user.check_password(current_password):
+            return Response(
+                {"error": "Неверный текущий пароль"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 2. Проверка совпадения новых паролей
+        if new_password != confirm_password:
+            return Response(
+                {"error": "Новые пароли не совпадают"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Валидация сложности (опционально, но рекомендуется)
+        if len(new_password) < 8:
+            return Response(
+                {"error": "Пароль слишком короткий (мин. 8 символов)"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 4. Установка нового пароля
+        user.set_password(new_password)
+        user.save()
+
+        return Response({"message": "Пароль успешно изменен"}, status=status.HTTP_200_OK)

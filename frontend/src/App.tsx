@@ -13,6 +13,8 @@ import RoleBuilder from './pages/RoleBuilder';
 import ReservePositionCandidates from './pages/ReservePositionCandidates';
 import ReservePositionsList from './pages/ReservePositionsList';
 import UserProfile from './pages/UserProfile';
+import ChangePassword from './pages/ChangePassword';
+
 
 function App() {
   return (
@@ -20,6 +22,7 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login/>}/>
         <Route path="/profile" element={<UserProfile/>}/>
+        <Route path="/change-password" element={<ChangePassword/>}/>
         <Route path="/dashboard" element={<Dashboard/>}/>
         <Route path="/" element={<Navigate to="/profile" replace/>}/>
         <Route path="/employees" element={<Employees/>}/>

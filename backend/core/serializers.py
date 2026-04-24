@@ -12,16 +12,17 @@ class EmployeeSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source='user.role', read_only=True)
     position_name = serializers.CharField(source='position.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True)
-    department_id = serializers.PrimaryKeyRelatedField(source='department', queryset=Department.objects.all(),  write_only=False)
+    department_id = serializers.PrimaryKeyRelatedField(source='department', queryset=Department.objects.all())
     competencies = CompetencySerializer(many=True, read_only=True)
-    position_id = serializers.PrimaryKeyRelatedField(source='position',  queryset=Position.objects.all(),  write_only=False)
+    position_id = serializers.PrimaryKeyRelatedField(source='position',  queryset=Position.objects.all())
     dynamics_score = serializers.SerializerMethodField()
     in_reserve = serializers.SerializerMethodField()
+    reserved_positions = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = ['id', 'full_name', 'position_name', 'department_name', 'department_id', 'hire_date',
-                  'status', 'competencies', 'dynamics_score', 'in_reserve', 'position_id', 'role']
+                  'status', 'competencies', 'dynamics_score', 'in_reserve', 'reserved_positions', 'position_id', 'role']
 
     def get_dynamics_score(self, obj):
         from .views import calculate_dynamics_score
@@ -29,6 +30,16 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def get_in_reserve(self, obj):
         return Reserve.objects.filter(employee=obj).exists()
+
+    def get_reserved_positions(self, obj):
+        reserves = Reserve.objects.filter(employee=obj).select_related('position')
+        return [
+            {
+                'id': reserve.position.id,
+                'name': reserve.position.name
+            }
+            for reserve in reserves
+        ]
 
 class EvaluationSerializer(serializers.ModelSerializer):
     competency_name = serializers.CharField(source='competency.name', read_only=True)

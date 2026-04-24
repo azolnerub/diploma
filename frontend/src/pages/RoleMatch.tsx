@@ -251,27 +251,14 @@ function PositionAccordion({ pos, details, isExpanded, onToggle }: PositionAccor
                     dataKey="subject" 
                     tick={{ fill: '#6a7481', fontSize: 11, fontWeight: 700 }}
                   />
-                  <PolarRadiusAxis angle={30} domain={[0, 5]} tick={false} axisLine={false} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                   
                   <Tooltip 
                     contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   />
+                  <Radar name="Текущий уровень" dataKey="current" stroke="#32CD32" fill="#32CD32" fillOpacity={0.4} strokeWidth={2}/>
+                  <Radar name="Требуемый уровень" dataKey="required" stroke="#6366f1" fill="#6366f1" fillOpacity={0.4} strokeWidth={2}/>
                   
-                  <Radar
-                    name="Требуемый уровень"
-                    dataKey="required"
-                    stroke="#6366f1"
-                    fill="#6366f1"
-                    fillOpacity={0.1}
-                  />
-                  
-                  <Radar
-                    name="Текущий уровень"
-                    dataKey="current"
-                    stroke="#32CD32"
-                    fill="#32CD32"
-                    fillOpacity={0.4}
-                  />
                 </RadarChart>
               </ResponsiveContainer>
             </div>

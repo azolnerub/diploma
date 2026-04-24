@@ -8,7 +8,8 @@ from .views import (CurrentUserView, EmployeeListView, EmployeeCreateView, Emplo
                     RoleProfileView, RoleMatchView, PositionCompetenciesFromRolesView,
                     PositionProfileListCreateView, PositionProfileUpdateDeleteView,
                     AddToReserveView, RemoveFromReserveView, PositionCandidatesView,
-                    PositionRolesView, RoleDetailView, UserFullProfileView)
+                    PositionRolesView, RoleDetailView, UserFullProfileView,
+                    ChangePasswordView)
 
 urlpatterns = [
     path('me/', CurrentUserView.as_view(), name='current_user'),
@@ -49,4 +50,6 @@ urlpatterns = [
 
     path('employees/<int:employee_id>/match/role/<int:role_id>/', RoleMatchView.as_view(), name='role_match'),
     path('employees/<int:employee_id>/match/role/<int:role_id>/position/<int:position_id>/', RolePositionMatchView.as_view(), name='role_position_match'),
+
+    path('change-password/', ChangePasswordView.as_view(), name='change-password'),
 ]

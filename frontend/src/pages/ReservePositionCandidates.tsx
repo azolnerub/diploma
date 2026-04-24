@@ -99,7 +99,7 @@ export default function ReservePositionCandidates() {
             />
           </div>
           <div className="flex gap-2 bg-white p-1.5 border border-slate-200 rounded-[1.25rem] shadow-sm">
-            {(['priority', 'match', 'dynamics'] as const).map((type) => (
+            {(['priority', 'dynamics'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setSortBy(type)}
@@ -107,7 +107,7 @@ export default function ReservePositionCandidates() {
                   sortBy === type ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'
                 }`}
               >
-                {type === 'priority' ? 'Приоритет' : type === 'match' ? 'Соответствие' : 'Динамика'}
+                {type === 'priority' ? 'Приоритет' : 'Динамика'}
               </button>
             ))}
           </div>
