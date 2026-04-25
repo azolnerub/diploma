@@ -73,8 +73,8 @@ export default function ReservePositionCandidates() {
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div>
             <button 
-              onClick={() => navigate('/hr/reserve/positions')} 
-              className="group mb-6 flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-indigo-600 transition-colors"
+              onClick={() => navigate('/reserve/positions')} 
+              className="group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold text-sm transition-colors mb-8"
             >
               <ArrowLeft size={18} className="transition-transform group-hover:-translate-x-1" />
               К списку должностей
@@ -191,7 +191,7 @@ function CandidateCard({ candidate, navigate }: { candidate: Candidate; navigate
       </div>
 
       <button
-        onClick={() => candidate.target_role_id && navigate(`/hr/match/role/${candidate.employee_id}/${candidate.target_role_id}`)}
+        onClick={() => candidate.target_role_id && navigate(`/reserve/match/role/${candidate.employee_id}/${candidate.target_role_id}`)}
         className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-slate-100"
       >
         <BarChart3 size={18} />

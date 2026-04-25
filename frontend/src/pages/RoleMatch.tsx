@@ -61,7 +61,6 @@ export default function RoleMatch() {
         console.log("ДАННЫЕ ОТ СЕРВЕРА (RESPONSE):", res.data);
         setData(res.data);
       } catch (err: unknown) {
-        console.error("ОШИБКА API:", err);
         if (err && typeof err === 'object' && 'response' in err) {
           const axiosError = err as { response: { data?: { detail?: string } } };
           setError(axiosError.response.data?.detail || 'Ошибка загрузки анализа');
@@ -106,7 +105,7 @@ export default function RoleMatch() {
           className="group mb-8 flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-indigo-600 transition-colors"
         >
           <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-          Вернуться в резерв
+          Назад
         </button>
 
         <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden">

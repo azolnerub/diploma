@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { User, Lock, Briefcase, Calendar as CalendarIcon, ChevronRight, Save, AlertCircle, Loader2, CheckCircle2, Shield } from 'lucide-react';
+import { User, Lock, Briefcase, Calendar as CalendarIcon, ChevronRight, Save, AlertCircle, Loader2, CheckCircle2, Shield, ArrowLeft } from 'lucide-react';
 import api from '../api/axios';
 
 interface Position { id: number; name: string; department_id: number; }
@@ -151,6 +151,14 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   return (
     <div className="max-w-5xl mx-auto py-10 px-6">
+      {isEdit && (
+        <button onClick={() => navigate('/employees')}
+        className="group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold text-sm transition-colors mb-8"
+        >
+          <ArrowLeft size={18}/>
+          Назад
+        </button>
+      )}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
         <div>
           <div className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-[0.2em] mb-2">

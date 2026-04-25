@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Shield, RefreshCw, CheckCircle2, Users, Target, X } from 'lucide-react';
+import { Shield, RefreshCw, CheckCircle2, Users, Target, X, ArrowLeft, ChevronDown, Filter, Briefcase, Search } from 'lucide-react';
 import axios from 'axios';
 
 interface ReservedPosition {
@@ -35,32 +35,37 @@ interface PositionOption {
 }
 
 export default function Reserve() {
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const searchTerm = searchParams.get('q') || '';
-  const selectedDepartment = searchParams.get('dept') || '';
-  const selectedPosition = searchParams.get('pos') || '';
-  const activeTab = (searchParams.get('tab') as 'all' | 'reserve' | 'positive' | 'negative') || 'all';
-
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [allRoles, setAllRoles] = useState<RoleOption[]>([]);
   const [allPositions, setAllPositions] = useState<PositionOption[]>([]);
   const [rolesByPosition, setRolesByPosition] = useState<Record<number, RoleOption[]>>({});
   const [loading, setLoading] = useState(true);
 
+  const [nameSearch, setNameSearch] = useState(searchParams.get('q') || '');
+  const [posSearch, setPosSearch] = useState('');
+  const [deptSearch, setDeptSearch] = useState('');
+  const [selectedPos, setSelectedPos] = useState<string | null>(searchParams.get('pos') || null);
+  const [selectedDept, setSelectedDept] = useState<string | null>(searchParams.get('dept') || null);
+  
+  const [showPosList, setShowPosList] = useState(false);
+  const [showDeptList, setShowDeptList] = useState(false);
+
+  const posRef = useRef<HTMLDivElement>(null);
+  const deptRef = useRef<HTMLDivElement>(null);
+
+  const activeTab = (searchParams.get('tab') as 'all' | 'reserve' | 'positive' | 'negative') || 'all';
+
   const [selectedRoleForEmployee, setSelectedRoleForEmployee] = useState<Record<number, number>>({});
   const [selectedTargetPositionForEmployee, setSelectedTargetPositionForEmployee] = useState<Record<number, number>>({});
 
-  const updateFilters = (updates: Record<string, string | null>) => {
-    const params = new URLSearchParams(searchParams);
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    });
-    setSearchParams(params, { replace: true });
-  };
+  useEffect(() => {
+    setSelectedPos(null);
+    setPosSearch('');
+  }, [selectedDept])
 
   const fetchData = async () => {
     try {
@@ -80,6 +85,25 @@ export default function Reserve() {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  // Клик вне списков
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (posRef.current && !posRef.current.contains(event.target as Node)) setShowPosList(false);
+      if (deptRef.current && !deptRef.current.contains(event.target as Node)) setShowDeptList(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (nameSearch) params.set('q', nameSearch);
+    if (selectedPos) params.set('pos', selectedPos);
+    if (selectedDept && user?.role === 'hr') params.set('dept', selectedDept);
+    if (activeTab !== 'all') params.set('tab', activeTab);
+    setSearchParams(params, { replace: true });
+  }, [nameSearch, selectedPos, selectedDept, setSearchParams, activeTab, user?.role]);
 
   const loadRolesForPosition = async (positionId: number) => {
     if (!positionId || rolesByPosition[positionId]) return;
@@ -121,40 +145,56 @@ export default function Reserve() {
     }
   };
 
-  const allDepartments = useMemo(() =>
-    Array.from(new Set(employees.map(e => e.department_name))).filter(Boolean)
-  , [employees]);
+  const uniquePositions = useMemo(() => { 
+    let baseEmployees = employees;
 
-  const availablePositionsForFilter = useMemo(() => {
-    const base = selectedDepartment
-      ? employees.filter(e => e.department_name === selectedDepartment)
-      : employees;
-    return Array.from(new Set(base.map(e => e.position_name))).filter(Boolean);
-  }, [employees, selectedDepartment]);
+    if (selectedDept) {
+      baseEmployees = baseEmployees.filter(e => e.department_name === selectedDept);
+    }
+    
+    const names = baseEmployees.map(e => e.position_name).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [employees, selectedDept])
+  const uniqueDepts = useMemo(() => 
+    Array.from(new Set(employees.map(e => e.department_name))).filter(Boolean).sort()
+  , [employees]);
 
   const filteredEmployees = useMemo(() => {
     let result = [...employees];
+    
     if (activeTab === 'reserve') result = result.filter(e => e.in_reserve);
     else if (activeTab === 'positive') result = result.filter(e => e.dynamics_score > 0);
     else if (activeTab === 'negative') result = result.filter(e => e.dynamics_score < 0);
 
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(e => e.full_name.toLowerCase().includes(term));
-    }
-    if (selectedDepartment) result = result.filter(e => e.department_name === selectedDepartment);
-    if (selectedPosition) result = result.filter(e => e.position_name === selectedPosition);
+    return result.filter(emp => {
+      const matchName = emp.full_name.toLowerCase().includes(nameSearch.toLowerCase());
+      const matchPos = selectedPos 
+        ? emp.position_name === selectedPos 
+        : emp.position_name.toLowerCase().includes(posSearch.toLowerCase());
+      
+      const matchDept = (user?.role !== 'hr' || !selectedDept) 
+        ? emp.department_name.toLowerCase().includes(deptSearch.toLowerCase())
+        : emp.department_name === selectedDept;
 
-    return result.sort((a, b) => b.dynamics_score - a.dynamics_score);
-  }, [employees, activeTab, searchTerm, selectedDepartment, selectedPosition]);
+      return matchName && matchPos && matchDept;
+    }).sort((a, b) => b.dynamics_score - a.dynamics_score);
+  }, [employees, activeTab, nameSearch, posSearch, deptSearch, selectedPos, selectedDept, user?.role]);
 
   if (authLoading || loading) return <div className="p-20 text-center animate-pulse text-slate-400 font-black text-xs uppercase">Загрузка...</div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-8">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 pb-20">
+      <button 
+        onClick={() => navigate('/dashboard')}
+        className="group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold text-sm transition-colors mb-8"
+      >
+        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+        Назад
+      </button>
+
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
             <Shield size={24} />
           </div>
           <div>
@@ -162,65 +202,100 @@ export default function Reserve() {
             <p className="text-slate-500 font-medium mt-1 uppercase text-[10px] tracking-widest">Управление талантами</p>
           </div>
         </div>
-      </header>
-
-      {/* ФИЛЬТРЫ (ВЕРНУЛИ ПОЗИЦИИ) */}
-      <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 mb-10 flex flex-wrap gap-4 items-center">
-        <div className="flex bg-slate-100 rounded-2xl p-1">
+        
+        <div className="flex bg-white border border-slate-100 rounded-2xl p-1.5 shadow-sm">
           {(['all', 'reserve', 'positive', 'negative'] as const).map(tab => (
             <button
               key={tab}
-              onClick={() => updateFilters({ tab })}
-              className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}
+              onClick={() => setSearchParams(prev => { prev.set('tab', tab); return prev; })}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
             >
               {tab === 'all' ? 'Все' : tab === 'reserve' ? 'Резерв' : tab === 'positive' ? 'Рост' : 'Риск'}
             </button>
           ))}
         </div>
-        <input
-          type="text"
-          placeholder="Поиск по имени..."
-          value={searchTerm}
-          onChange={e => updateFilters({ q: e.target.value })}
-          className="flex-1 min-w-[200px] border border-slate-200 rounded-2xl px-5 py-3 outline-none focus:border-indigo-600 font-bold text-sm"
-        />
-        <select
-          value={selectedDepartment}
-          onChange={e => updateFilters({ dept: e.target.value, pos: null })}
-          className="px-6 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs outline-none"
-        >
-          <option value="">Все отделы</option>
-          {allDepartments.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-        
-        {/* ВЕРНУЛИ ФИЛЬТР ПО ДОЛЖНОСТЯМ */}
-        <select
-          value={selectedPosition}
-          onChange={e => updateFilters({ pos: e.target.value })}
-          className="px-6 py-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs outline-none"
-        >
-          <option value="">Все должности</option>
-          {availablePositionsForFilter.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
+      </header>
 
-        <button onClick={() => setSearchParams({})} className="p-3 text-slate-400 hover:text-rose-500 transition-colors">
-          <RefreshCw size={18} />
-        </button>
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-10">
+        
+        {/* Поиск по имени */}
+        <div className="md:col-span-4 relative">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text"
+            placeholder="Поиск сотрудника..."
+            value={nameSearch}
+            onChange={(e) => setNameSearch(e.target.value)}
+            className="w-full pl-14 pr-6 py-4 bg-white border border-slate-100 rounded-[20px] shadow-sm outline-none focus:border-indigo-600 transition-all font-bold text-slate-700"
+          />
+        </div>
+
+        {/* Фильтр по отделу */}
+        {user?.role === 'hr' && (
+          <div className="md:col-span-3 relative" ref={deptRef}>
+            <Filter className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text"
+              placeholder="Отдел..."
+              autoComplete="off"
+              value={showDeptList ? deptSearch : (selectedDept || deptSearch)}
+              onFocus={() => { setShowDeptList(true); setDeptSearch(''); }}
+              onChange={(e) => { setDeptSearch(e.target.value); setSelectedDept(null); }}
+              className="w-full pl-14 pr-12 py-4 bg-white border border-slate-100 rounded-[20px] shadow-sm outline-none focus:border-indigo-600 transition-all font-bold text-slate-700 text-ellipsis"
+            />
+            <ChevronDown className={`absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 transition-transform ${showDeptList ? 'rotate-180' : ''}`} size={18} />
+            {showDeptList && (
+              <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-60 overflow-y-auto p-2">
+                <div onMouseDown={() => { setSelectedDept(null); setDeptSearch(''); setShowDeptList(false); }} className="px-4 py-2 hover:bg-slate-50 rounded-xl cursor-pointer text-[10px] font-black uppercase text-indigo-600">Все отделы</div>
+                {uniqueDepts.filter(d => d.toLowerCase().includes(deptSearch.toLowerCase())).map(d => (
+                  <div key={d} onMouseDown={() => { setSelectedDept(d); setDeptSearch(d); setShowDeptList(false); }} className="px-4 py-3 hover:bg-indigo-50 rounded-xl cursor-pointer text-xs font-bold text-slate-600">{d}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Фильтр по должности */}
+        <div className={`${user?.role === 'hr' ? 'md:col-span-4' : 'md:col-span-7'} relative`} ref={posRef}>
+          <Briefcase className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input 
+            type="text"
+            placeholder="Должность..."
+            autoComplete="off"
+            value={showPosList ? posSearch : (selectedPos || posSearch)}
+            onFocus={() => { setShowPosList(true); setPosSearch(''); }}
+            onChange={(e) => { setPosSearch(e.target.value); setSelectedPos(null); }}
+            className="w-full pl-14 pr-12 py-4 bg-white border border-slate-100 rounded-[20px] shadow-sm outline-none focus:border-indigo-600 transition-all font-bold text-slate-700 text-ellipsis"
+          />
+          <ChevronDown className={`absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 transition-transform ${showPosList ? 'rotate-180' : ''}`} size={18} />
+          {showPosList && (
+            <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-60 overflow-y-auto p-2">
+              <div onMouseDown={() => { setSelectedPos(null); setPosSearch(''); setShowPosList(false); }} className="px-4 py-2 hover:bg-slate-50 rounded-xl cursor-pointer text-[10px] font-black uppercase text-indigo-600">Все должности</div>
+              {uniquePositions.filter(p => p.toLowerCase().includes(posSearch.toLowerCase())).map(p => (
+                <div key={p} onMouseDown={() => { setSelectedPos(p); setPosSearch(p); setShowPosList(false); }} className="px-4 py-3 hover:bg-indigo-50 rounded-xl cursor-pointer text-xs font-bold text-slate-600">{p}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Сброс */}
+        <div className="md:col-span-1">
+          <button 
+            onClick={() => { setNameSearch(''); setSelectedPos(null); setSelectedDept(null); setPosSearch(''); setDeptSearch(''); }}
+            className="w-full h-full flex items-center justify-center bg-slate-900 text-white rounded-[20px] hover:bg-rose-600 transition-colors shadow-lg shadow-slate-200"
+          >
+            <RefreshCw size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredEmployees.map(emp => {
           const isNeg = emp.dynamics_score < 0;
           const targetPosId = selectedTargetPositionForEmployee[emp.id];
-          
-          // Логика формирования списка ролей
-          let availableRoles: RoleOption[] = [];
-          if (targetPosId && rolesByPosition[targetPosId]) {
-            availableRoles = rolesByPosition[targetPosId];
-          } else {
-            // Если должность не выбрана, показываем роли его отдела или общие
-            availableRoles = allRoles.filter(r => r.department === null || r.department === emp.department_id);
-          }
+          const availableRoles = targetPosId && rolesByPosition[targetPosId] 
+            ? rolesByPosition[targetPosId] 
+            : allRoles.filter(r => r.department === null || r.department === emp.department_id);
 
           return (
             <div key={emp.id} className={`bg-white border rounded-[40px] p-8 transition-all hover:shadow-2xl flex flex-col ${isNeg ? 'border-rose-100 bg-rose-50/20' : 'border-slate-100'}`}>
@@ -239,7 +314,7 @@ export default function Reserve() {
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">В резерве на:</label>
                   <div className="flex flex-wrap gap-2">
                     {emp.reserved_positions.map(p => (
-                      <span key={p.id} className="group text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl flex items-center gap-2 border border-emerald-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 transition-all cursor-default">
+                      <span key={p.id} className="group text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl flex items-center gap-2 border border-emerald-100 hover:bg-rose-50 hover:text-rose-700 transition-all cursor-default">
                         {p.name}
                         <X size={14} className="cursor-pointer hover:scale-125 transition-transform" onClick={() => toggleReserve(emp, p.id)} />
                       </span>
@@ -249,7 +324,6 @@ export default function Reserve() {
               )}
 
               <div className="mt-auto space-y-5 pt-6 border-t border-slate-50">
-                {/* Выбор новой должности */}
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
                     <Target size={10} /> Целевая должность
@@ -260,14 +334,7 @@ export default function Reserve() {
                     onChange={(e) => {
                       const pId = Number(e.target.value);
                       setSelectedTargetPositionForEmployee(prev => ({ ...prev, [emp.id]: pId }));
-                      
-                      if (pId) {
-                        loadRolesForPosition(pId);
-                        const currentRole = selectedRoleForEmployee[emp.id];
-                        if (currentRole && rolesByPosition[pId] && !rolesByPosition[pId].some(r => r.id === currentRole)) {
-                            setSelectedRoleForEmployee(prev => ({ ...prev, [emp.id]: 0 }));
-                        }
-                      }
+                      if (pId) loadRolesForPosition(pId);
                     }}
                   >
                     <option value="">Выберите должность...</option>
@@ -279,7 +346,6 @@ export default function Reserve() {
                   </select>
                 </div>
 
-                {/* Выбор роли */}
                 <div className="space-y-2">
                   <label className="text-[9px] font-black uppercase tracking-widest ml-1 flex items-center gap-1 text-indigo-600">
                     <CheckCircle2 size={10} /> Целевая роль
@@ -296,16 +362,16 @@ export default function Reserve() {
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => navigate(`/hr/match/role/${emp.id}/${selectedRoleForEmployee[emp.id]}`)}
+                    onClick={() => navigate(`/reserve/match/role/${emp.id}/${selectedRoleForEmployee[emp.id]}`)}
                     disabled={!selectedRoleForEmployee[emp.id]}
-                    className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-20 transition-all active:scale-95"
+                    className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-20 transition-all"
                   >
                     Анализ
                   </button>
                   <button
                     onClick={() => toggleReserve(emp)}
                     disabled={!targetPosId}
-                    className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all active:scale-95"
+                    className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all"
                   >
                     Добавить
                   </button>
@@ -315,10 +381,10 @@ export default function Reserve() {
           );
         })}
       </div>
-      
-      {/* Футер-кнопка */}
+
+      {/* Кнопка Кандидаты */}
       <div className="mt-16 flex justify-center pb-20">
-        <button onClick={() => navigate('/hr/reserve/positions')} className="group flex items-center gap-6 bg-white hover:bg-slate-900 border-2 border-slate-100 hover:border-slate-900 px-10 py-6 rounded-[40px] transition-all shadow-xl">
+        <button onClick={() => navigate('/reserve/positions')} className="group flex items-center gap-6 bg-white hover:bg-slate-900 border-2 border-slate-100 hover:border-slate-900 px-10 py-6 rounded-[40px] transition-all shadow-xl">
           <div className="w-14 h-14 bg-indigo-50 group-hover:bg-white/10 rounded-2xl flex items-center justify-center text-3xl transition-all"><Users size={32} /></div>
           <div className="text-left">
             <div className="font-black text-xl text-slate-900 group-hover:text-white transition-colors tracking-tight leading-none">Кандидаты по должностям</div>

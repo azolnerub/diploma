@@ -1,13 +1,21 @@
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { Users, Trophy, Star, LogOut, LayoutDashboard, UserCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
+    useEffect(() => {
+    if (!loading && user && user.role !== 'hr' && user.role !== 'manager') {
+      navigate('/profile', { replace: true });
+  }
+  }, [user, loading, navigate]);
+  
   if (loading) return <DashboardLoader />;
-  if (!user) return null;
+  if (!user) return null; 
+
 
   const firstName = user.full_name.split(' ')[1] || user.full_name.split(' ')[0];
 
@@ -100,7 +108,7 @@ export default function Dashboard() {
           {/* Оценки */}
           {user?.role === 'manager' && (
             <div
-              onClick={() => navigate('/hr/evaluate')}
+              onClick={() => navigate('/evaluate')}
               className="md:col-span-4 bg-slate-900 rounded-[2.5rem] p-10 text-white hover:bg-slate-800 transition-all cursor-pointer group flex flex-col justify-between"
             >
               <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center group-hover:bg-white/20 transition-colors">

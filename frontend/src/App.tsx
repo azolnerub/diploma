@@ -7,35 +7,40 @@ import EmployeeForm from './pages/EmployeeForm';
 import EvaluateEmployee from './pages/EvaluateEmployee';
 import EvaluateList from './pages/EvaluateList';
 import Reserve from './pages/Reserve';
-import PositionMatch from './pages/PositionMatch';
 import RoleMatch from './pages/RoleMatch';
 import RoleBuilder from './pages/RoleBuilder';
 import ReservePositionCandidates from './pages/ReservePositionCandidates';
 import ReservePositionsList from './pages/ReservePositionsList';
 import UserProfile from './pages/UserProfile';
 import ChangePassword from './pages/ChangePassword';
-
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Авторизация */}
         <Route path="/login" element={<Login/>}/>
+        {/* Общие страницы - профиль и смена пароля*/}
         <Route path="/profile" element={<UserProfile/>}/>
-        <Route path="/change-password" element={<ChangePassword/>}/>
-        <Route path="/dashboard" element={<Dashboard/>}/>
+        <Route path="/profile/change-password" element={<ChangePassword/>}/>
+        {/* Страницы для HR и Руководителя - панель управления, список сотрудников, резерв, анализ соответствия, список вакансий, список кандидатов*/}
+        <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><Dashboard/></ProtectedRoute>}/>
+        <Route path="/employees" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><Employees/></ProtectedRoute>}/>
+        <Route path="/reserve" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><Reserve/></ProtectedRoute>}/>
+        <Route path="/reserve/match/role/:employee_id/:role_id" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><RoleMatch/></ProtectedRoute>}/>
+        <Route path="/reserve/positions" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><ReservePositionsList/></ProtectedRoute>}/>
+        <Route path="/reserve/position/:position_id" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><ReservePositionCandidates/></ProtectedRoute>}/>
+        {/* Страницы для HR - HR-панель, редактирование сотрудника, создание ролей, создание идеальных профилей*/}
+        <Route path="/hr" element={<ProtectedRoute allowedRoles={['hr']}><HRPanel/></ProtectedRoute>}/>
+        <Route path="/hr/edit/:id" element={<ProtectedRoute allowedRoles={['hr']}><EmployeeForm/></ProtectedRoute>}/>
+        <Route path="/hr/roles" element={<ProtectedRoute allowedRoles={['hr']}><RoleBuilder/></ProtectedRoute>}/>
+        {/* Страницы для Руководителя - список сотрудников на оценку, оценка сотрудников*/}
+        <Route path="/evaluate" element={<ProtectedRoute allowedRoles={['manager']}><EvaluateList/></ProtectedRoute>}/>
+        <Route path="/evaluate/:id" element={<ProtectedRoute allowedRoles={['manager']}><EvaluateEmployee/></ProtectedRoute>}/>
+        {/* Редирект с главной */}
         <Route path="/" element={<Navigate to="/profile" replace/>}/>
-        <Route path="/employees" element={<Employees/>}/>
-        <Route path="/hr" element={<HRPanel/>}/>
-        <Route path="/hr/edit/:id" element={<EmployeeForm/>}/>
-        <Route path="/hr/evaluate/:id" element={<EvaluateEmployee/>}/>
-        <Route path="/hr/evaluate" element={<EvaluateList/>}/>
-        <Route path="/reserve" element={<Reserve/>}/>
-        <Route path="/hr/match/role/:employee_id/:role_id" element={<RoleMatch/>}/>
-        <Route path="/hr/match/:employee_id/:position_id" element={<PositionMatch/>}/>
-        <Route path="/hr/roles" element={<RoleBuilder/>}/>
-        <Route path="/hr/reserve/positions" element={<ReservePositionsList/>}/>
-        <Route path="/hr/reserve/position/:position_id" element={<ReservePositionCandidates/>}/>
+        {/* Обработка несуществующих страниц */}
         <Route path="*" element={<Navigate to="/login" replace/>}/>
       </Routes>
     </Router>

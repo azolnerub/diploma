@@ -24,7 +24,7 @@ export default function Login() {
       const { access, refresh } = response.data;
 
       await login(access, refresh);
-      navigate('/dashboard', { replace: true });
+      navigate('/profile', { replace: true });
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const serverError = err.response?.data?.detail || err.response?.data?.non_field_errors?.[0];

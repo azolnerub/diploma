@@ -91,7 +91,7 @@ export default function UserProfile() {
 
   const handleMatchAnalysis = (trajectory: Trajectory) => {
     if (!data?.employee_id || !trajectory.role_id) return;
-    navigate(`/hr/match/role/${data.employee_id}/${trajectory.role_id}`);
+    navigate(`/reserve/match/role/${data.employee_id}/${trajectory.role_id}`);
   };
 
   if (loading) {
@@ -127,7 +127,7 @@ export default function UserProfile() {
 
         <div className="flex gap-3">
           <button 
-          onClick={() => navigate('/change-password')} 
+          onClick={() => navigate('/profile/change-password')} 
           className="group flex items-center gap-2 bg-white text-slate-600 border border-slate-200 px-6 py-4 rounded-[20px] font-bold hover:bg-slate-50 transition shadow-sm active:scale-95">
             <KeyRound size={18} className="group-hover:rotate-12 transition-transform" />
             <span>Сменить пароль</span>

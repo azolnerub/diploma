@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { UserPlus, Settings, Target,  Users, ArrowRight} from 'lucide-react';
+import { UserPlus, Settings, Target,  Users, ArrowRight, ArrowLeft} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EmployeeForm from './EmployeeForm';
 import IdealProfiles from './RoleBuilder';
@@ -20,7 +20,13 @@ export default function HRPanel() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20 selection:bg-indigo-100">
       <div className="max-w-7xl mx-auto p-6 md:p-10">
-        
+        <button
+      onClick={() => navigate('/dashboard')}
+      className="group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold text-sm transition-colors mb-5"
+      >
+        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform"/>
+        Назад
+      </button>
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 mb-12">
           <div className="space-y-2">
             <h1 className="text-5xl font-black text-slate-900 tracking-tight">

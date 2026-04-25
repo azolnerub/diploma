@@ -56,11 +56,12 @@ class DeptSerializer(serializers.ModelSerializer):
 
 class PosSerializer(serializers.ModelSerializer):
     department_id = serializers.IntegerField(source='department.id', read_only=True)
+    department_name = serializers.CharField(source='department.name', read_only=True)
     candidate_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Position
-        fields = ['id', 'name', 'department_id', 'candidate_count']
+        fields = ['id', 'name', 'department_id', 'department_name', 'candidate_count']
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
