@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from '../api/axios';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Layers, CheckCircle2, Settings2, X, ArrowUpRight, Search, ChevronDown, Filter, Briefcase, ArrowLeft, Tag, RotateCcw } from 'lucide-react';
+import { Plus, Layers, CheckCircle2, Settings2, X, ArrowUpRight, Search, ChevronDown, Filter, Briefcase, Tag, RotateCcw } from 'lucide-react';
 
 interface Category {
   id: number;
@@ -53,8 +52,7 @@ interface RoleProfileResponse {
 }
 
 export default function RoleBuilder() {
-  const navigate = useNavigate();
-  
+ 
   // Данные с сервера
   const [departments, setDepartments] = useState<{id: number, name: string}[]>([]);
   const [categories, setCategories] = useState<Category[]>([]); // Состояние для категорий
@@ -99,10 +97,10 @@ export default function RoleBuilder() {
   const catRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (activeTab === 'editor') {
+    if (activeTab === 'editor' && !editingRoleId) {
         setSelectedPos([]); 
     }
-  }, [activeTab, selectedDept]);
+  }, [activeTab, selectedDept, editingRoleId]);
 
   useEffect(() => {
     setFilterPos(null);
@@ -290,14 +288,6 @@ export default function RoleBuilder() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto bg-slate-50 min-h-screen">
-      
-      <button 
-        onClick={() => navigate('/dashboard')}
-        className="group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold text-sm transition-colors mb-8"
-      >
-        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-        Назад в панель
-      </button>
 
       <div className="flex justify-between items-center mb-10">
         <div>

@@ -8,7 +8,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
     useEffect(() => {
-    if (!loading && user && user.role !== 'hr' && user.role !== 'manager') {
+    const role = user?.role || '';
+    const hasAccess = ['hr', 'manager', 'director'].includes(role);
+    if (!loading && user && !hasAccess) {
       navigate('/profile', { replace: true });
   }
   }, [user, loading, navigate]);
@@ -106,7 +108,7 @@ export default function Dashboard() {
           </div>
 
           {/* Оценки */}
-          {user?.role === 'manager' && (
+          {(user?.role === 'manager' || user?.role === 'director') && (
             <div
               onClick={() => navigate('/evaluate')}
               className="md:col-span-4 bg-slate-900 rounded-[2.5rem] p-10 text-white hover:bg-slate-800 transition-all cursor-pointer group flex flex-col justify-between"
@@ -117,7 +119,9 @@ export default function Dashboard() {
               <div>
                 <h3 className="text-2xl font-black mb-2">Оценки</h3>
                 <p className="text-slate-400 group-hover:text-white/80 transition-colors text-sm font-medium">
-                  Оценивание компетенций сотрудников
+                  {user?.role === 'director'
+                  ? 'Оценивание работы руководителей отделов'
+                  : 'Оценивание компетенций сотрудников'}
                 </p>
               </div>
             </div>

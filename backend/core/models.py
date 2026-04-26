@@ -5,8 +5,12 @@ class User(AbstractUser):
     ROLE_CHOICES = (
         ('hr', 'HR-специалист'),
         ('manager', 'Руководитель'),
+        ('director', 'Директор'),
         ('employee', 'Сотрудник'),
     )
+    first_name = None
+    last_name = None
+
     role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='employee')
 
 class Department(models.Model):
@@ -74,7 +78,6 @@ class Role(models.Model):
     name = models.CharField(max_length=150, verbose_name="Название роли")
     description = models.TextField(blank=True, verbose_name="Описание роли")
     department = models.ForeignKey('Department', on_delete=models.CASCADE, related_name='roles', null=True, blank=True)
-    default_missing_level = models.PositiveIntegerField(default=20, verbose_name="Уровень по умолчанию при отсутствии оценки (0-100)")
     positions = models.ManyToManyField('Position', blank=True, related_name='roles')
 
     def __str__(self):

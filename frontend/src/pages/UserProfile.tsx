@@ -61,7 +61,7 @@ const formatPeriod = (periodStr: string) => {
 };
 
 const Avatar = ({ name }: { name?: string }) => {
-  const initials = name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || '??';
+  const initials = name?.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || '??';
   return (
     <div className="w-20 h-20 rounded-[24px] bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-100 border-4 border-white">
       {initials}
@@ -107,7 +107,7 @@ export default function UserProfile() {
 
   if (!data) return <div className="p-10 text-center font-bold text-red-500">Профиль не найден</div>;
 
-  const canAccessAdmin = user?.role === 'hr' || user?.role === 'manager';
+  const canAccessAdmin = ['hr', 'manager', 'director'].includes(user?.role || '');
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8 font-sans pb-20">

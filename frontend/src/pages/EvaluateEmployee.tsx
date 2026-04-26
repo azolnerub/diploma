@@ -48,7 +48,7 @@ export default function EvaluateEmployee() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
-  const {loading: authloading} = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [competencies, setCompetencies] = useState<Competency[]>([]);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
@@ -56,171 +56,174 @@ export default function EvaluateEmployee() {
   const [score, setScore] = useState<number>(50);
   const [comment, setComment] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-useEffect(() => {
-  const loadData = async () => {
-    try {
-      const [empRes, evalRes] = await Promise.all([
-        api.get<Employee>(`employees/${id}/`),
-        api.get<Evaluation[]>(`employees/${id}/evaluations/`)
-      ]);
+  useEffect(() => {
+    const loadData = async () => {
+      if (authLoading) return;
 
-      setEmployee(empRes.data);
+      try {
+        const empRes = await api.get<Employee>(`employees/${id}/`);
+        const targetEmployee = empRes.data;
 
-      const realEvals = evalRes.data.filter((ev: Evaluation) => 
-        !(ev.comment?.includes("HR") || ev.comment?.includes("добавлена HR"))
-      );
-      setEvaluations(realEvals);
-
-      const positionId = empRes.data.position_id;
-      if (!positionId) {
-        setLoading(false);
-        return;
-      }
-
-      // Загружаем оба источника параллельно
-      const [profileRes, rolesRes] = await Promise.allSettled([
-        api.get<RawPositionCompetency[]>(`positions/${positionId}/profile/`),
-        api.get<RawRoleCompetency[]>(`positions/${positionId}/competencies-from-roles/`)
-      ]);
-
-      // 1. Обрабатываем данные из PositionProfile
-      const positionProfileComps: Competency[] = profileRes.status === 'fulfilled'  
-        ? profileRes.value.data.map((item: RawPositionCompetency) => ({
-            id: Number(item.competency),
-            name: item.competency_name,
-            description: item.description || '',
-            required_level: item.required_level ? Number(item.required_level) : undefined,
-            is_key: Boolean(item.is_key),
-            source: 'position'
-          }))
-        : [];
-
-      // 2. Обрабатываем данные из ролей
-      const roleComps: Competency[] = rolesRes.status === 'fulfilled'
-        ? rolesRes.value.data.map((item: RawRoleCompetency) => ({
-            id: Number(item.id),
-            name: item.name,
-            description: item.description || '',
-            required_level: item.required_level ? Number(item.required_level) : undefined,
-            is_key: Boolean(item.is_key),
-            source: 'role'
-          }))
-        : [];
-
-      const combined = new Map<number, Competency>();
-
-      roleComps.forEach(c => combined.set(c.id, c));
-
-      positionProfileComps.forEach(c => {
-        if (combined.has(c.id)) {
-          const existing = combined.get(c.id)!;
-          combined.set(c.id, {
-            ...existing,
-            required_level: c.required_level,
-            is_key: c.is_key || existing.is_key,
-            source: 'position'
-          });
-        } else {
-          combined.set(c.id, c);
+        if (user?.role === 'director') {
+          const isManagerial = targetEmployee.position_name?.toLowerCase().includes('менеджер') || 
+                               targetEmployee.position_name?.toLowerCase().includes('руководитель');
+          
+          if (!isManagerial) {
+            alert("Директор может оценивать только руководителей отделов");
+            navigate(-1);
+            return;
+          }
         }
-      });
 
-      const finalArray = Array.from(combined.values());
-      console.log("Итоговый список компетенций:", finalArray);
-      setCompetencies(finalArray);
+        setEmployee(targetEmployee);
 
-    } catch (err) {
-      console.error("Критическая ошибка загрузки:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const [evalRes, profileRes, rolesRes] = await Promise.allSettled([
+          api.get<Evaluation[]>(`employees/${id}/evaluations/`),
+          api.get<RawPositionCompetency[]>(`positions/${targetEmployee.position_id}/profile/`),
+          api.get<RawRoleCompetency[]>(`positions/${targetEmployee.position_id}/competencies-from-roles/`)
+        ]);
 
-  loadData();
-}, [id]);
+        if (evalRes.status === 'fulfilled') {
+          setEvaluations(evalRes.value.data);
+        }
 
-  if (authloading) return <div className="p-10 text-center">Загрузка пользователя...</div>;
+        if (!targetEmployee.position_id) {
+          setLoading(false);
+          return;
+        }
+
+        // Компетенции из профиля должности
+        const positionProfileComps: Competency[] = profileRes.status === 'fulfilled'  
+          ? profileRes.value.data.map((item: RawPositionCompetency) => ({
+              id: Number(item.competency),
+              name: item.competency_name,
+              description: item.description || '',
+              required_level: item.required_level ? Number(item.required_level) : undefined,
+              is_key: Boolean(item.is_key),
+              source: 'position'
+            }))
+          : [];
+
+        // Компетенции из ролей
+        const roleComps: Competency[] = rolesRes.status === 'fulfilled'
+          ? rolesRes.value.data.map((item: RawRoleCompetency) => ({
+              id: Number(item.id),
+              name: item.name,
+              description: item.description || '',
+              required_level: item.required_level ? Number(item.required_level) : undefined,
+              is_key: Boolean(item.is_key),
+              source: 'role'
+            }))
+          : [];
+
+        // Объединение с приоритетом должности
+        const combined = new Map<number, Competency>();
+        roleComps.forEach(c => combined.set(c.id, c));
+        positionProfileComps.forEach(c => {
+          if (combined.has(c.id)) {
+            const existing = combined.get(c.id)!;
+            combined.set(c.id, {
+              ...existing,
+              required_level: c.required_level,
+              is_key: c.is_key || existing.is_key,
+              source: 'position'
+            });
+          } else {
+            combined.set(c.id, c);
+          }
+        });
+
+        setCompetencies(Array.from(combined.values()));
+
+      } catch (err: any) {
+        if (err.response?.status === 403 || err.response?.status === 404) {
+          alert("Доступ ограничен или сотрудник не найден");
+          navigate(-1);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [id, navigate, user, authLoading]);
 
   const handleSaveEvaluation = async () => {
     if (!selectedCompetencyId) return alert("Выберите компетенцию");
+    setSaving(true);
 
     try {
       await api.post(`employees/${id}/competencies/add/`, {
         competency_id: selectedCompetencyId,
         value: score,
-        comment: comment.trim() || "Оценка руководителя",
+        comment: comment.trim() || (user?.role === 'director' ? "Оценка директора" : "Оценка руководителя"),
       });
 
       const res = await api.get(`employees/${id}/evaluations/`);
-      const realEvals = res.data.filter((ev: Evaluation) => 
-        !(ev.comment?.includes("HR") || ev.comment?.includes("добавлена HR"))
-      );
-      setEvaluations(realEvals);
+      setEvaluations(res.data);
 
       setScore(50);
       setComment('');
       setSelectedCompetencyId(null);
     } catch {
       alert("Ошибка при сохранении оценки");
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (loading) return <div className="p-10 text-center">Загрузка данных сотрудника...</div>;
+  if (authLoading || loading) return <div className="p-10 text-center font-medium text-slate-400">Загрузка данных...</div>;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <button onClick={() => navigate(-1)} className="mb-6 flex items-center gap-2 text-slate-600 hover:text-slate-900">
+    <div className="p-8 max-w-6xl mx-auto animate-in fade-in duration-500">
+      <button onClick={() => navigate(-1)} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors">
         ← Назад
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <div>
-          <h1 className="text-4xl font-bold">{employee?.full_name}</h1>
-          <p className="text-xl text-slate-600 mt-2">
-            {employee?.position_name} • {employee?.department_name}
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight">{employee?.full_name}</h1>
+          <p className="text-xl text-slate-400 mt-2 font-medium">
+            {employee?.position_name} <span className="text-slate-200 mx-2">•</span> {employee?.department_name}
           </p>
 
           <div className="mt-10">
-            <h3 className="font-semibold mb-5 text-lg">Компетенции для оценки</h3>
+            <h3 className="font-bold mb-5 text-lg uppercase tracking-wider text-slate-500 text-sm">Компетенции для оценки</h3>
 
             {competencies.length === 0 ? (
-              <div className="p-12 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-300">
-                <p className="text-slate-400">Для текущей должности пока нет компетенций</p>
+              <div className="p-12 text-center bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
+                <p className="text-slate-400 font-medium">Для данной позиции компетенции не настроены</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {competencies.map(c => {
-                  const existingEval = evaluations.find(ev => ev.competency_name === c.name);
+                  const lastEval = evaluations.find(ev => ev.competency_name === c.name);
+                  const isSelected = selectedCompetencyId === c.id;
+                  
                   return (
                     <div
                       key={c.id}
                       onClick={() => setSelectedCompetencyId(c.id)}
-                      className={`p-5 rounded-2xl border-2 cursor-pointer transition-all flex justify-between items-start ${
-                        selectedCompetencyId === c.id 
-                          ? 'border-indigo-600 bg-indigo-50' 
-                          : 'border-slate-200 hover:border-slate-300'
+                      className={`p-6 rounded-[2rem] border-2 cursor-pointer transition-all flex justify-between items-start ${
+                        isSelected ? 'border-indigo-600 bg-indigo-50/50 shadow-lg shadow-indigo-100' : 'border-slate-100 hover:border-slate-200 bg-white'
                       }`}
                     >
                       <div className="flex-1">
-                        <p className="font-semibold text-slate-900">{c.name}</p>
-                        
-                        {c.required_level !== undefined && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Требуемый уровень: <span className="font-semibold text-indigo-600">{c.required_level}%</span>
+                        <p className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{c.name}</p>
+                        {c.required_level && (
+                          <p className="text-xs font-bold text-indigo-400 mt-1 uppercase tracking-tighter">
+                            Цель: {c.required_level}%
                           </p>
                         )}
-                        {c.description && (
-                          <p className="text-sm text-slate-500 mt-2 leading-relaxed">{c.description}</p>
-                        )}
+                        {c.description && <p className="text-sm text-slate-500 mt-3 leading-relaxed">{c.description}</p>}
                       </div>
 
                       <div className="text-right ml-4">
-                        {existingEval && (
-                          <div className="text-emerald-600 font-bold text-2xl">{existingEval.value}</div>
-                        )}
+                        {lastEval && <div className="text-3xl font-black text-indigo-600">{lastEval.value}</div>}
                         {c.is_key && (
-                          <span className="inline-block mt-1 text-xs bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full">Ключевая</span>
+                          <span className="inline-block mt-2 text-[10px] font-black uppercase bg-rose-100 text-rose-600 px-3 py-1 rounded-full">Ключевая</span>
                         )}
                       </div>
                     </div>
@@ -231,68 +234,69 @@ useEffect(() => {
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl p-8">
-          <h3 className="text-2xl font-bold mb-8">Выставить оценку</h3>
+        <div className="bg-white rounded-[3rem] shadow-2xl shadow-slate-200/60 p-10 border border-slate-50 h-fit sticky top-8">
+          <h3 className="text-2xl font-black text-slate-900 mb-8">Выставить балл</h3>
 
-          <div className="space-y-8">
+          <div className="space-y-10">
             <div>
-              <div className="flex justify-between mb-4">
-                <span className="font-medium">Уровень владения</span>
-                <span className="text-5xl font-black text-indigo-600">{score}</span>
+              <div className="flex justify-between items-end mb-6">
+                <span className="font-bold text-slate-400 uppercase text-xs tracking-widest">Уровень владения</span>
+                <span className="text-6xl font-black text-indigo-600 tracking-tighter">{score}</span>
               </div>
               <input
                 type="range"
                 min="0"
                 max="100"
+                step="5"
                 value={score}
                 onChange={e => setScore(Number(e.target.value))}
-                className="w-full accent-indigo-600"
+                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-3">Комментарий руководителя (необязательно)</label>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Комментарий {user?.role === 'director' ? 'директора' : 'руководителя'}</label>
               <textarea
                 value={comment}
                 onChange={e => setComment(e.target.value)}
-                className="w-full h-32 border border-slate-200 rounded-2xl p-5 focus:border-indigo-500 resize-y"
-                placeholder="Дополнительные замечания или обоснование оценки..."
+                className="w-full h-32 bg-slate-50 border-none rounded-[2rem] p-6 focus:ring-2 focus:ring-indigo-100 transition-all resize-none font-medium text-slate-700"
+                placeholder="Обоснуйте оценку или дайте рекомендацию..."
               />
             </div>
 
             <button
               onClick={handleSaveEvaluation}
-              disabled={!selectedCompetencyId}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl transition"
+              disabled={!selectedCompetencyId || saving}
+              className="w-full bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-200 text-white font-black py-5 rounded-[2rem] transition-all shadow-xl active:scale-[0.98] uppercase tracking-widest text-sm"
             >
-              Сохранить оценку
+              {saving ? 'Сохранение...' : 'Зафиксировать результат'}
             </button>
           </div>
 
-          <div className="mt-12">
-            <h4 className="font-semibold mb-5 flex items-center gap-3">
+          <div className="mt-12 border-t border-slate-50 pt-10">
+            <h4 className="font-black text-slate-900 mb-6 flex items-center justify-between">
               История оценок 
-              <span className="bg-slate-100 text-slate-500 text-xs px-3 py-1 rounded-full">{evaluations.length}</span>
+              <span className="bg-indigo-50 text-indigo-600 text-xs px-4 py-1 rounded-full">{evaluations.length}</span>
             </h4>
 
-            {evaluations.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 border border-dashed border-slate-200 rounded-3xl">
-                Оценок пока нет
-              </div>
-            ) : (
-              <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-                {evaluations.map(ev => (
-                  <div key={ev.id} className="bg-slate-50 p-5 rounded-2xl">
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium">{ev.competency_name}</span>
-                      <span className="text-3xl font-black text-indigo-600">{ev.value}</span>
+            <div className="space-y-4 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+              {evaluations.length === 0 ? (
+                <p className="text-center py-10 text-slate-300 font-medium italic">История пуста</p>
+              ) : (
+                evaluations.map(ev => (
+                  <div key={ev.id} className="bg-slate-50/50 p-6 rounded-[2rem] border border-white">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-bold text-slate-800">{ev.competency_name}</span>
+                      <span className="text-2xl font-black text-indigo-600">{ev.value}</span>
                     </div>
-                    {ev.comment && <p className="text-sm text-slate-600 mt-3">{ev.comment}</p>}
-                    <p className="text-xs text-slate-400 mt-4">{new Date(ev.date).toLocaleDateString('ru-RU')}</p>
+                    {ev.comment && <p className="text-sm text-slate-500 font-medium leading-snug">{ev.comment}</p>}
+                    <p className="text-[10px] font-bold text-slate-300 mt-4 uppercase tracking-wider">
+                      {new Date(ev.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

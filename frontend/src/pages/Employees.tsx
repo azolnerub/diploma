@@ -68,9 +68,13 @@ export default function Employees() {
     Array.from(new Set(employees.map(e => e.department_name))).filter(Boolean).sort()
   , [employees]);
 
-  const allPositions = useMemo(() => 
-    Array.from(new Set(employees.map(e => e.position_name))).filter(Boolean).sort()
-  , [employees]);
+  const allPositions = useMemo(() => {
+    const relevantEmployees = selectedDept
+      ? employees.filter(e => e.department_name === selectedDept)
+      : employees;
+    
+    return Array.from(new Set(relevantEmployees.map(e => e.position_name))).filter(Boolean).sort();
+  },[employees, selectedDept]);
 
   const filteredEmployees = useMemo(() => {
     return employees.filter(emp => {
@@ -109,7 +113,7 @@ export default function Employees() {
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <button
-        onClick={() => navigate('/hr')}
+        onClick={() => navigate(-1)}
         className="group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold text-sm transition-colors mb-8"
       >
         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform"/>
@@ -144,7 +148,7 @@ export default function Employees() {
           />
         </div>
 
-        {user?.role === 'hr' && (
+        {['hr', 'director'].includes(user?.role || '') && (
           <div className="relative flex-1" ref={deptRef}>
             <Filter className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
             <input 
@@ -162,7 +166,7 @@ export default function Employees() {
               <div className="absolute z-50 w-full mt-2 bg-white border border-slate-100 rounded-3xl shadow-2xl max-h-60 overflow-y-auto p-2 animate-in fade-in slide-in-from-top-2">
                 <div onMouseDown={() => { setSelectedDept(null); setDeptSearch(''); setShowDeptList(false); }} className="px-4 py-3 hover:bg-slate-50 rounded-2xl cursor-pointer text-[10px] font-black uppercase text-indigo-600">Все отделы</div>
                 {allDepartments.filter(d => d.toLowerCase().includes(deptSearch.toLowerCase())).map(dept => (
-                  <div key={dept} onMouseDown={() => { setSelectedDept(dept); setDeptSearch(dept); setShowDeptList(false); }} className="px-4 py-3 hover:bg-indigo-50 rounded-2xl cursor-pointer text-sm font-bold text-slate-600 transition-colors">
+                  <div key={dept} onMouseDown={() => { setSelectedDept(dept); setDeptSearch(dept); setSelectedPos(null); setPosSearch(''); setShowDeptList(false); }} className="px-4 py-3 hover:bg-indigo-50 rounded-2xl cursor-pointer text-sm font-bold text-slate-600 transition-colors">
                     {dept}
                   </div>
                 ))}

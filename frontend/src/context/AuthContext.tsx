@@ -4,7 +4,7 @@ import api from '../api/axios';
 interface User {
   id: number;
   username: string;
-  role: 'hr' | 'manager' | 'employee';
+  role: 'hr' | 'manager' | 'employee' | 'director';
   full_name: string;
   position?: string | null;
   department?: string | null;

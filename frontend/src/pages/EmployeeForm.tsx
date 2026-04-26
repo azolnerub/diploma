@@ -72,9 +72,10 @@ export default function EmployeeForm() {
           const res = await api.get(`employees/${id}/`);
           const data = res.data;
           
+          // Маппим роль для внутреннего состояния (всегда латиница)
           const roleMap: Record<string, string> = {
-            'Сотрудник': 'employee', 'Руководитель': 'manager', 'HR-специалист': 'hr',
-            'employee': 'employee', 'manager': 'manager', 'hr': 'hr'
+            'Сотрудник': 'employee', 'Руководитель': 'manager', 'Директор': 'director', 'HR-специалист': 'hr',
+            'employee': 'employee', 'manager': 'manager', 'director': 'director', 'hr': 'hr'
           };
 
           setForm({
@@ -102,45 +103,52 @@ export default function EmployeeForm() {
     return dictionaries.positions.filter(p => !form.department_id || p.department_id === Number(form.department_id));
   }, [dictionaries.positions, form.department_id]);
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!form.department_id || !form.position_id) {
-    setError('Выберите отдел и должность из списка');
-    return;
-  }
-
-  setError('');
-  setIsSaving(true);
-
-  try {
-    const payload = {
-      full_name: form.full_name,
-      department_id: Number(form.department_id),
-      position_id: Number(form.position_id),
-      status: form.status,
-      role: form.system_role, 
-      system_role: form.system_role,
-    };
-
-    if (isEdit) {
-      await api.patch(`employees/${id}/update/`, payload);
-    } else {
-      const createPayload = {
-        ...payload,
-        username: form.username,
-        password: form.password,
-        hire_date: form.hire_date
-      };
-      await api.post('employees/create/', createPayload);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.department_id || !form.position_id) {
+      setError('Выберите отдел и должность из списка');
+      return;
     }
-    setSuccess(true);
-    setTimeout(() => navigate('/employees'), 1500);
-  } catch {
-    setError("Ошибка при сохранении");
-  } finally {
-    setIsSaving(false);
-  }
-};
+
+    setError('');
+    setIsSaving(true);
+
+    try {
+      const payload = {
+        full_name: form.full_name,
+        department_id: Number(form.department_id),
+        position_id: Number(form.position_id),
+        status: form.status,
+        system_role: form.system_role,
+      };
+
+      if (isEdit) {
+        await api.patch(`employees/${id}/update/`, payload);
+      } else {
+        const createPayload = {
+          ...payload,
+          username: form.username,
+          password: form.password,
+          hire_date: form.hire_date
+        };
+        await api.post('employees/create/', createPayload);
+      }
+      
+      setSuccess(true);
+      setTimeout(() => navigate('/employees'), 1500);
+    } catch (err: any) {
+      console.error("Ошибка сохранения:", err.response?.data);
+      const serverError = err.response?.data;
+      if (serverError && typeof serverError === 'object') {
+        const firstError = Object.values(serverError)[0];
+        setError(Array.isArray(firstError) ? firstError[0] : "Ошибка валидации");
+      } else {
+        setError("Ошибка при сохранении");
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (isLoading) return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
@@ -169,12 +177,10 @@ const handleSubmit = async (e: React.FormEvent) => {
             {isEdit ? 'Редактирование' : 'Новый сотрудник'}
           </h1>
         </div>
-
       </header>
 
       <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-20">
         <div className="lg:col-span-2 space-y-8">
-          {/* КАРТОЧКА: ЛИЧНЫЕ ДАННЫЕ */}
           <div className="bg-white rounded-[32px] p-8 shadow-sm border border-slate-100 space-y-8">
             <div className="flex items-center gap-4 pb-6 border-b border-slate-50">
               <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><User size={20} /></div>
@@ -258,17 +264,21 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
 
-        {/* ПРАВАЯ ПАНЕЛЬ: СИСТЕМНЫЕ НАСТРОЙКИ */}
         <div className="space-y-8">
           <div className="bg-slate-900 rounded-[32px] p-8 text-white space-y-6 shadow-xl shadow-slate-200/50">
             <h3 className="font-black uppercase tracking-widest text-[10px] text-slate-500 border-b border-white/5 pb-4">Конфигурация доступа</h3>
             <div className="space-y-5">
               <div className="space-y-2">
                 <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 ml-1">Роль сотрудника</label>
-                <select value={form.system_role} onChange={e => setForm({...form, system_role: e.target.value})} className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm appearance-none cursor-pointer">
+                <select 
+                  value={form.system_role} 
+                  onChange={e => setForm({...form, system_role: e.target.value})} 
+                  className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl outline-none focus:border-indigo-500 font-bold text-sm appearance-none cursor-pointer"
+                >
                   <option value="employee" className="text-slate-900">Сотрудник</option>
                   <option value="hr" className="text-slate-900">HR-специалист</option>
                   <option value="manager" className="text-slate-900">Руководитель</option>
+                  <option value="director" className="text-slate-900">Директор</option>
                 </select>
               </div>
 
@@ -281,7 +291,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                     value={form.hire_date} 
                     onChange={e => setForm({...form, hire_date: e.target.value})} 
                     disabled={isEdit}
-                    onClick={(e) => !isEdit && e.currentTarget.showPicker()}
                     className={`w-full px-5 py-4 border rounded-2xl outline-none font-bold text-sm transition-all [color-scheme:dark] ${isEdit ? 'bg-white/5 border-white/5 text-slate-500 cursor-not-allowed' : 'bg-white/5 border-white/10 text-white focus:border-indigo-500 cursor-pointer'}`}
                   />
                 </div>

@@ -231,7 +231,7 @@ export default function Reserve() {
         </div>
 
         {/* Фильтр по отделу */}
-        {user?.role === 'hr' && (
+        {['hr', 'director'].includes(user?.role || '') && (
           <div className="md:col-span-3 relative" ref={deptRef}>
             <Filter className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 

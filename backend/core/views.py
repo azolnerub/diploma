@@ -1,4 +1,6 @@
+from .permissions import IsHR, IsManager, IsManagement, IsDirector, IsHROrDirector
 from rest_framework import generics, status
+from rest_framework.exceptions import PermissionDenied
 from django.db.models import Count
 from django.utils import timezone
 from django.db.models.functions import TruncQuarter
@@ -37,26 +39,26 @@ class CurrentUserView(APIView):
         }
         return Response(data)
 
+# Список сотрудников
 class EmployeeListView(generics.ListAPIView):
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def get_queryset(self):
-        queryset = Employee.objects.select_related('position', 'department').all()
         user = self.request.user
+        queryset = Employee.objects.all()
 
-        if user.role == 'employee':
-            queryset = queryset.filter(user=user)
-        elif user.role == 'manager' and hasattr(user, 'employee'):
-            queryset = queryset.filter(department=user.employee.department)
-
+        if user.role == 'director':
+            return queryset.filter(user__role='manager')
+        elif user.role == 'manager':
+            return queryset.filter(department=user.employee.department)
         return queryset
 
 # Создание сотрудника
 class EmployeeCreateView(generics.CreateAPIView):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
     def create(self, request, *args, **kwargs):
         try:
@@ -67,7 +69,7 @@ class EmployeeCreateView(generics.CreateAPIView):
             if not username or not password:
                 return Response({"detail": "Логин и пароль обязательны"}, status=400)
 
-            if system_role not in ['employee', 'hr', 'manager']:
+            if system_role not in ['employee', 'hr', 'manager', 'director']:
                 system_role = 'employee'
 
             # 1. Создаем пользователя
@@ -108,13 +110,13 @@ class EmployeeCreateView(generics.CreateAPIView):
 class EmployeeUpdateView(generics.UpdateAPIView):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
     def perform_update(self, serializer):
         instance = serializer.save()
         new_role = self.request.data.get('system_role')
 
-        if new_role in ['employee', 'hr', 'manager']:
+        if new_role in ['employee', 'hr', 'manager', 'director']:
             user = instance.user
             if user:
                 user.role = new_role
@@ -130,19 +132,41 @@ class EmployeeUpdateView(generics.UpdateAPIView):
 # Удаление сотрудника
 class EmployeeDeleteView(generics.DestroyAPIView):
     queryset = Employee.objects.all()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
     def perform_destroy(self, instance):
+        if instance.user == self.request.user:
+            raise PermissionDenied("Вы не можете удалить свой аккаунт!")
+
         user = instance.user
         instance.delete()
         if user:
             user.delete()
 
-# Страница редактирования сотрудника
+# Данные сотрудника
 class EmployeeDetailView(generics.RetrieveAPIView):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        obj = super().get_object()
+        user = self.request.user
+
+        if user.role == 'hr':
+            return obj
+        if user.role == 'director' and obj.user.role == 'manager':
+            return obj
+        if user.role == 'manager' and hasattr(user, 'employee'):
+            if obj.department == user.employee.department:
+                return obj
+            else:
+                from django.http import Http404
+                raise Http404("Сотрудник не найден в вашем отделе")
+        if obj.user == user:
+            return obj
+
+        raise PermissionDenied("У вас нет прав для просмотра этого профиля")
 
 # Отделы
 class DepartmentListView(generics.ListAPIView):
@@ -168,7 +192,11 @@ class PositionListView(generics.ListAPIView):
 class CompetencyListView(generics.ListCreateAPIView):
     queryset = Competency.objects.all()
     serializer_class = CompetencySerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsHR()]
+        return [IsAuthenticated()]
 
 # Категории
 class CategoryListView(generics.ListAPIView):
@@ -179,16 +207,29 @@ class CategoryListView(generics.ListAPIView):
 # Оценки сотрудников
 class EmployeeEvaluationListView(generics.ListAPIView):
     serializer_class = EvaluationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManager|IsDirector]
     lookup_field = 'employee_id'
 
     def get_queryset(self):
+        user = self.request.user
         employee_id = self.kwargs['employee_id']
-        return Evaluation.objects.filter(employee_id=employee_id)
+        target_employee = get_object_or_404(Employee, id=employee_id)
 
-# Добавление компетенции в профиль сотрудника
+        if user.role == 'director':
+            if target_employee.user.role == 'manager':
+                return Evaluation.objects.filter(employee_id=employee_id)
+            raise PermissionDenied("Директор может просматривать оценки только руководителей")
+
+        if user.role == 'manager':
+            if hasattr(user, 'employee') and target_employee.department == user.employee.department:
+                return Evaluation.objects.filter(employee_id=employee_id)
+            else:
+                raise PermissionDenied("Вы не можете просматривать оценки сотрудников чужого отдела")
+        raise PermissionDenied("Доступ запрещен")
+
+# Добавление компетенции в профиль сотрудника (???)
 class AddCompetencyToProfileView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
     def post(self, request, employee_id):
         employee = get_object_or_404(Employee, id=employee_id)
@@ -207,30 +248,38 @@ class AddCompetencyToProfileView(APIView):
         )
         return Response({"message": "Компетенция добавлена в профиль"}, status=201)
 
+# Оценка компетенций сотрудника
 class AddCompetencyToEmployeeView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManager|IsDirector]
 
     def post(self, request, employee_id):
-        employee = get_object_or_404(Employee, id=employee_id)
+        target_employee = get_object_or_404(Employee, id=employee_id)
+        user = request.user
+
+        if user.role == 'director':
+            if target_employee.user.role != 'manager':
+                raise PermissionDenied("Директор оценивает только руководителей")
+        elif user.role == 'manager':
+            if not hasattr(user, 'employee') or target_employee.department != user.employee.department:
+                raise PermissionDenied("Вы не можете оценивать сотрудников из другого отдела")
+
         competency_id = request.data.get('competency_id')
-        value = request.data.get('value', 3)
+        value = request.data.get('value', 50)
         comment = request.data.get('comment', '')
-
         competency = get_object_or_404(Competency, id=competency_id)
-
         evaluation = Evaluation.objects.create(
-            employee=employee,
+            employee=target_employee,
             competency=competency,
             value=value,
             comment=comment,
             manager=request.user
         )
 
-        return Response({"message": "Компетенция добавлена", "evaluation_id": evaluation.id}, status=status.HTTP_201_CREATED)
+        return Response({"message": "Оценка успешно добавлена", "evaluation_id": evaluation.id}, status=status.HTTP_201_CREATED)
 
 # Удаление компетенции из профиля сотрудника
 class RemoveCompetencyFromEmployeeView(generics.DestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
     def delete(self, request, employee_id, competency_id):
         deleted = Evaluation.objects.filter(employee_id=employee_id, competency_id=competency_id).delete()
@@ -238,17 +287,19 @@ class RemoveCompetencyFromEmployeeView(generics.DestroyAPIView):
             return Response({"message": "Компетенция удалена"}, status=status.HTTP_204_NO_CONTENT)
         return Response({"message": "Компетенция не найдена"}, status=status.HTTP_404_NOT_FOUND)
 
+# Компетенции должности
 class PositionCompetenciesView(generics.ListAPIView):
     serializer_class = CompetencySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def get_queryset(self):
         position_id = self.kwargs['pk']
         position = get_object_or_404(Position, pk=position_id)
         return position.competencies.all()
 
+# Обновление компетенций должности
 class PositionCompetenciesUpdateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
     def put(self, request, pk):
         position = get_object_or_404(Position, pk=pk)
@@ -265,6 +316,7 @@ class PositionCompetenciesUpdateView(APIView):
             "competency_count": len(competency_ids)
         }, status=200)
 
+# Расчет динамики развития
 def calculate_dynamics_score(employee, date_to=None):
     evaluations_qs = Evaluation.objects.filter(employee=employee)
 
@@ -308,6 +360,7 @@ def calculate_dynamics_score(employee, date_to=None):
 
     return round(final_score, 1)
 
+# Динамика развития сотрудников
 class EmployeeDynamicsView(generics.ListAPIView):
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated]
@@ -324,7 +377,7 @@ class EmployeeDynamicsView(generics.ListAPIView):
 
         return queryset
 
-# === РАСЧЁТ СООТВЕТСТВИЯ СОТРУДНИКА ЦЕЛЕВОЙ ДОЛЖНОСТИ ===
+# Расчет соответствия сотрудника целевой должности
 def calculate_position_match(employee, position_id, role_id=None):
     try:
         position = Position.objects.get(pk=position_id)
@@ -408,6 +461,7 @@ def calculate_position_match(employee, position_id, role_id=None):
         "total_weight": round(total_weight, 3)
     }
 
+# Расчет соответствия сотрудника целевой роли
 def calculate_role_match(employee, role_id):
     """Расчёт соответствия роли + всех должностей внутри роли"""
     role = get_object_or_404(Role, pk=role_id)
@@ -476,14 +530,15 @@ def calculate_role_match(employee, role_id):
         'positions': positions_data
     }
 
-# === РОЛИ ===
+# Создание роли и список ролей
 class RoleListCreateView(generics.ListCreateAPIView):
     queryset = Role.objects.prefetch_related('positions').select_related('department').all()
     serializer_class = RoleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
+# Связь роли с идеальным профилем должности
 class RoleProfileView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def get(self, request, role_id):
         role = get_object_or_404(Role, id=role_id)
@@ -543,6 +598,7 @@ class RoleProfileView(APIView):
         # 3. Если данные пришли в непонятном формате
         return Response({"error": "Invalid data format"}, status=400)
 
+# Соответствие роли в общем
 class RoleMatchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -551,6 +607,7 @@ class RoleMatchView(APIView):
         data = calculate_role_match(employee, role_id)
         return Response(data)
 
+# Соответствие должностям в роли
 class RolePositionMatchView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -559,8 +616,9 @@ class RolePositionMatchView(APIView):
         data = calculate_position_match(employee, position_id, role_id)
         return Response(data)
 
+# Подключение компетенций идеального профиля должности к роли
 class PositionCompetenciesFromRolesView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def get(self, request, position_id):
         position = get_object_or_404(Position, pk=position_id)
@@ -590,9 +648,10 @@ class PositionCompetenciesFromRolesView(APIView):
         unique = {c['id']: c for c in competencies}
         return Response(list(unique.values()))
 
+# Создание идеального профиля должности
 class PositionProfileListCreateView(generics.ListCreateAPIView):
     serializer_class = PositionProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
     def get_queryset(self):
         position_id = self.kwargs.get('position_id')
@@ -604,18 +663,21 @@ class PositionProfileListCreateView(generics.ListCreateAPIView):
         position_id = self.kwargs.get('position_id')
         serializer.save(position_id=position_id)
 
+# Обновление/удаление идеального профиля должности
 class PositionProfileUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     queryset = PositionProfile.objects.all()
     serializer_class = PositionProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHR]
 
+# Данные о роли
 class RoleDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
+# Добавление в резерв
 class AddToReserveView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def post(self, request, employee_id):
         employee = get_object_or_404(Employee, pk=employee_id)
@@ -646,8 +708,9 @@ class AddToReserveView(APIView):
 
         return Response({"message": "Сотрудник добавлен в кадровый резерв"}, status=201)
 
+# Удаление из резерва
 class RemoveFromReserveView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def delete(self, request, employee_id):
         position_id = request.data.get('position_id') or request.query_params.get('position_id')
@@ -661,8 +724,9 @@ class RemoveFromReserveView(APIView):
             return Response({"message": "Удалено из резерва"}, status=204)
         return Response({"detail": "Запись не найдена"}, status=404)
 
+# Кандидаты на должность
 class PositionCandidatesView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def get(self, request, position_id):
         user = request.user
@@ -702,19 +766,32 @@ class PositionCandidatesView(APIView):
             "candidates": candidates
         })
 
+# Должности в роли
 class PositionRolesView(generics.ListAPIView):
     serializer_class = RoleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsManagement]
 
     def get_queryset(self):
         position = get_object_or_404(Position, pk=self.kwargs['position_id'])
         return position.roles.all()
 
+# Профиль сотрудника
 class UserFullProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        employee = get_object_or_404(Employee, user=request.user)
+
+        try:
+            employee = Employee.objects.select_related('user', 'position', 'department').get(user=request.user)
+        except Employee.DoesNotExist:
+            return Response({"detail": "Профиль сотрудника не найден"}, status=404)
+
+        if not employee.position_id:
+            return Response ({
+                "employee_id": employee.id,
+                "full_name": employee.full_name,
+                "detail": "Должность не назначена"
+            }, status=200)
 
         # 1. Радар (Текущее соответствие)
         current_match = calculate_position_match(employee, employee.position_id)
@@ -833,6 +910,7 @@ class UserFullProfileView(APIView):
             "feedback": feedback_list
         })
 
+# Смена пароля
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
