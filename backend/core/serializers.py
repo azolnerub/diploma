@@ -75,7 +75,7 @@ class RoleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Role
-        fields = ['id', 'name', 'description', 'department', 'department_name', 'default_missing_level', 'positions']
+        fields = ['id', 'name', 'description', 'department', 'department_name', 'positions']
 
 class RoleProfileSerializer(serializers.ModelSerializer):
     competency_name = serializers.CharField(source='competency.name', read_only=True)

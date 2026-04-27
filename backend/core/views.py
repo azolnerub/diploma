@@ -651,7 +651,7 @@ class PositionCompetenciesFromRolesView(APIView):
 # Создание идеального профиля должности
 class PositionProfileListCreateView(generics.ListCreateAPIView):
     serializer_class = PositionProfileSerializer
-    permission_classes = [IsHR]
+    permission_classes = [IsManagement]
 
     def get_queryset(self):
         position_id = self.kwargs.get('position_id')

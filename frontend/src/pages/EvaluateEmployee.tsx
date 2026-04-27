@@ -1,15 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../hooks/useAuth';
-
-interface Employee {
-  id: number;
-  full_name: string;
-  position_id?: number;
-  position_name?: string;
-  department_name?: string;
-}
+import { ChevronDown, CheckCircle2, AlertCircle, History, User, Award, MessageSquare, ArrowLeft, Loader2, Calendar } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Competency {
   id: number;
@@ -17,7 +11,6 @@ interface Competency {
   description?: string;
   required_level?: number;
   is_key?: boolean;
-  source?: 'position' | 'role';
 }
 
 interface Evaluation {
@@ -28,278 +21,434 @@ interface Evaluation {
   comment: string;
 }
 
-interface RawPositionCompetency {
-  competency: number;
-  competency_name: string;
-  description?: string;
-  required_level?: string | number;
-  is_key?: boolean;
-}
-
-interface RawRoleCompetency {
-  id: number;
-  name: string;
-  description?: string;
-  required_level?: string | number;
-  is_key?: boolean;
-}
-
 export default function EvaluateEmployee() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  
   const { user, loading: authLoading } = useAuth();
-  const [employee, setEmployee] = useState<Employee | null>(null);
+
+  const [employee, setEmployee] = useState<any>(null);
   const [competencies, setCompetencies] = useState<Competency[]>([]);
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
-  const [selectedCompetencyId, setSelectedCompetencyId] = useState<number | null>(null);
-  const [score, setScore] = useState<number>(50);
-  const [comment, setComment] = useState<string>('');
+  
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [pendingEvaluations, setPendingEvaluations] = useState<Record<number, { score: number, comment: string }>>({});
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Стейт для управления раскрытыми датами в истории
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+
+  const toggleDate = (date: string) => {
+    setExpandedDates(prev => ({
+      ...prev,
+      [date]: !prev[date]
+    }));
+  };
+
+  // Группировка истории по датам
+  const groupedHistory = useMemo(() => {
+    const groups: Record<string, Evaluation[]> = {};
+    evaluations.forEach(ev => {
+      const date = new Date(ev.date).toLocaleDateString('ru-RU');
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(ev);
+    });
+    return Object.entries(groups).sort((a, b) => 
+      new Date(b[0].split('.').reverse().join('-')).getTime() - 
+      new Date(a[0].split('.').reverse().join('-')).getTime()
+    );
+  }, [evaluations]);
 
   useEffect(() => {
     const loadData = async () => {
       if (authLoading) return;
-
       try {
-        const empRes = await api.get<Employee>(`employees/${id}/`);
+        const empRes = await api.get(`employees/${id}/`);
         const targetEmployee = empRes.data;
-
-        if (user?.role === 'director') {
-          const isManagerial = targetEmployee.position_name?.toLowerCase().includes('менеджер') || 
-                               targetEmployee.position_name?.toLowerCase().includes('руководитель');
-          
-          if (!isManagerial) {
-            alert("Директор может оценивать только руководителей отделов");
-            navigate(-1);
-            return;
-          }
-        }
-
         setEmployee(targetEmployee);
 
         const [evalRes, profileRes, rolesRes] = await Promise.allSettled([
-          api.get<Evaluation[]>(`employees/${id}/evaluations/`),
-          api.get<RawPositionCompetency[]>(`positions/${targetEmployee.position_id}/profile/`),
-          api.get<RawRoleCompetency[]>(`positions/${targetEmployee.position_id}/competencies-from-roles/`)
+          api.get(`employees/${id}/evaluations/`),
+          api.get(`positions/${targetEmployee.position_id}/profile/`),
+          api.get(`positions/${targetEmployee.position_id}/competencies-from-roles/`)
         ]);
 
-        if (evalRes.status === 'fulfilled') {
-          setEvaluations(evalRes.value.data);
-        }
+        if (evalRes.status === 'fulfilled') setEvaluations(evalRes.value.data);
 
-        if (!targetEmployee.position_id) {
-          setLoading(false);
-          return;
-        }
+        const compMap = new Map<number, Competency>();
 
-        // Компетенции из профиля должности
-        const positionProfileComps: Competency[] = profileRes.status === 'fulfilled'  
-          ? profileRes.value.data.map((item: RawPositionCompetency) => ({
-              id: Number(item.competency),
-              name: item.competency_name,
-              description: item.description || '',
-              required_level: item.required_level ? Number(item.required_level) : undefined,
-              is_key: Boolean(item.is_key),
-              source: 'position'
-            }))
-          : [];
-
-        // Компетенции из ролей
-        const roleComps: Competency[] = rolesRes.status === 'fulfilled'
-          ? rolesRes.value.data.map((item: RawRoleCompetency) => ({
-              id: Number(item.id),
-              name: item.name,
-              description: item.description || '',
-              required_level: item.required_level ? Number(item.required_level) : undefined,
-              is_key: Boolean(item.is_key),
-              source: 'role'
-            }))
-          : [];
-
-        // Объединение с приоритетом должности
-        const combined = new Map<number, Competency>();
-        roleComps.forEach(c => combined.set(c.id, c));
-        positionProfileComps.forEach(c => {
-          if (combined.has(c.id)) {
-            const existing = combined.get(c.id)!;
-            combined.set(c.id, {
-              ...existing,
-              required_level: c.required_level,
-              is_key: c.is_key || existing.is_key,
-              source: 'position'
+        if (rolesRes.status === 'fulfilled' && Array.isArray(rolesRes.value.data)) {
+          rolesRes.value.data.forEach((c: any) => {
+            compMap.set(Number(c.id), {
+              id: Number(c.id),
+              name: c.name,
+              description: c.description,
+              required_level: c.required_level ? Number(c.required_level) : 0,
+              is_key: Boolean(c.is_key)
             });
-          } else {
-            combined.set(c.id, c);
-          }
-        });
-
-        setCompetencies(Array.from(combined.values()));
-
-      } catch (err: any) {
-        if (err.response?.status === 403 || err.response?.status === 404) {
-          alert("Доступ ограничен или сотрудник не найден");
-          navigate(-1);
+          });
         }
+
+        if (profileRes.status === 'fulfilled' && Array.isArray(profileRes.value.data)) {
+          profileRes.value.data.forEach((p: any) => {
+            const cid = Number(p.competency);
+            const existing = compMap.get(cid);
+            compMap.set(cid, {
+              id: cid,
+              name: p.competency_name || existing?.name,
+              description: p.description || existing?.description,
+              required_level: p.required_level ? Number(p.required_level) : (existing?.required_level || 0),
+              is_key: Boolean(p.is_key) || Boolean(existing?.is_key)
+            });
+          });
+        }
+
+        setCompetencies(Array.from(compMap.values()));
+      } catch (err) {
+        console.error("Ошибка при загрузке данных оценки:", err);
       } finally {
         setLoading(false);
       }
     };
-
     loadData();
-  }, [id, navigate, user, authLoading]);
+  }, [id, authLoading]);
 
-  const handleSaveEvaluation = async () => {
-    if (!selectedCompetencyId) return alert("Выберите компетенцию");
+  const isFormComplete = useMemo(() => {
+    return competencies.length > 0 && competencies.every(c => pendingEvaluations[c.id] !== undefined);
+  }, [competencies, pendingEvaluations]);
+
+  const handleFinalSave = async () => {
+    if (!isFormComplete) return;
     setSaving(true);
-
     try {
-      await api.post(`employees/${id}/competencies/add/`, {
-        competency_id: selectedCompetencyId,
-        value: score,
-        comment: comment.trim() || (user?.role === 'director' ? "Оценка директора" : "Оценка руководителя"),
-      });
-
-      const res = await api.get(`employees/${id}/evaluations/`);
-      setEvaluations(res.data);
-
-      setScore(50);
-      setComment('');
-      setSelectedCompetencyId(null);
+      await Promise.all(
+        Object.entries(pendingEvaluations).map(([compId, data]) => 
+          api.post(`employees/${id}/competencies/add/`, {
+            competency_id: Number(compId),
+            value: data.score,
+            comment: data.comment.trim() || (user?.role === 'director' ? "Оценка директора" : "Оценка руководителя")
+          })
+        )
+      );
     } catch {
-      alert("Ошибка при сохранении оценки");
+      alert("Не удалось сохранить оценки. Попробуйте позже.");
     } finally {
       setSaving(false);
     }
   };
 
-  if (authLoading || loading) return <div className="p-10 text-center font-medium text-slate-400">Загрузка данных...</div>;
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+      <Loader2 className="animate-spin text-indigo-600" size={40} />
+      <span className="text-slate-400 font-bold uppercase text-xs tracking-widest">Загрузка матрицы компетенций...</span>
+    </div>
+  );
 
   return (
-    <div className="p-8 max-w-6xl mx-auto animate-in fade-in duration-500">
-      <button onClick={() => navigate(-1)} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-colors">
-        ← Назад
-      </button>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">{employee?.full_name}</h1>
-          <p className="text-xl text-slate-400 mt-2 font-medium">
-            {employee?.position_name} <span className="text-slate-200 mx-2">•</span> {employee?.department_name}
-          </p>
-
-          <div className="mt-10">
-            <h3 className="font-bold mb-5 text-lg uppercase tracking-wider text-slate-500 text-sm">Компетенции для оценки</h3>
-
-            {competencies.length === 0 ? (
-              <div className="p-12 text-center bg-slate-50 rounded-[2rem] border border-dashed border-slate-200">
-                <p className="text-slate-400 font-medium">Для данной позиции компетенции не настроены</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {competencies.map(c => {
-                  const lastEval = evaluations.find(ev => ev.competency_name === c.name);
-                  const isSelected = selectedCompetencyId === c.id;
-                  
-                  return (
-                    <div
-                      key={c.id}
-                      onClick={() => setSelectedCompetencyId(c.id)}
-                      className={`p-6 rounded-[2rem] border-2 cursor-pointer transition-all flex justify-between items-start ${
-                        isSelected ? 'border-indigo-600 bg-indigo-50/50 shadow-lg shadow-indigo-100' : 'border-slate-100 hover:border-slate-200 bg-white'
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <p className={`font-bold text-lg ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{c.name}</p>
-                        {c.required_level && (
-                          <p className="text-xs font-bold text-indigo-400 mt-1 uppercase tracking-tighter">
-                            Цель: {c.required_level}%
-                          </p>
-                        )}
-                        {c.description && <p className="text-sm text-slate-500 mt-3 leading-relaxed">{c.description}</p>}
-                      </div>
-
-                      <div className="text-right ml-4">
-                        {lastEval && <div className="text-3xl font-black text-indigo-600">{lastEval.value}</div>}
-                        {c.is_key && (
-                          <span className="inline-block mt-2 text-[10px] font-black uppercase bg-rose-100 text-rose-600 px-3 py-1 rounded-full">Ключевая</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+    <div className="p-4 md:p-10 max-w-7xl mx-auto bg-slate-50 min-h-screen font-sans">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-12 gap-8">
+        <div className="animate-in slide-in-from-left duration-700">
+          <button 
+            onClick={() => navigate(-1)} 
+            className="group flex items-center gap-2 text-slate-400 hover:text-indigo-600 font-bold text-sm transition-all mb-6"
+          >
+            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+            Назад
+          </button>
+          <div className="flex flex-wrap items-center gap-4">
+             <h1 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter">
+              {employee?.full_name}
+            </h1>
+            <span className="px-4 py-1.5 bg-white border border-slate-200 rounded-full text-[10px] font-black uppercase text-slate-400 tracking-widest shadow-sm">
+              Форма оценивания
+            </span>
           </div>
+          <p className="text-lg text-slate-500 mt-3 font-medium flex items-center gap-3">
+            <span className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center">
+                <User size={16} className="text-indigo-600" />
+            </span>
+            {employee?.position_name} 
+            <span className="text-slate-300">•</span> 
+            <span className="text-slate-400">{employee?.department_name}</span>
+          </p>
         </div>
 
-        <div className="bg-white rounded-[3rem] shadow-2xl shadow-slate-200/60 p-10 border border-slate-50 h-fit sticky top-8">
-          <h3 className="text-2xl font-black text-slate-900 mb-8">Выставить балл</h3>
-
-          <div className="space-y-10">
-            <div>
-              <div className="flex justify-between items-end mb-6">
-                <span className="font-bold text-slate-400 uppercase text-xs tracking-widest">Уровень владения</span>
-                <span className="text-6xl font-black text-indigo-600 tracking-tighter">{score}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={score}
-                onChange={e => setScore(Number(e.target.value))}
-                className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-              />
+        <div className="w-full xl:w-auto bg-white p-6 md:p-8 rounded-[3rem] shadow-2xl shadow-slate-200/60 border border-white flex flex-col md:flex-row items-center gap-8 animate-in zoom-in duration-500">
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Оценено</p>
+                <p className="text-3xl font-black text-slate-900 leading-none">
+                    {Object.keys(pendingEvaluations).length} <span className="text-slate-200">/</span> {competencies.length}
+                </p>
             </div>
-
-            <div>
-              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Комментарий {user?.role === 'director' ? 'директора' : 'руководителя'}</label>
-              <textarea
-                value={comment}
-                onChange={e => setComment(e.target.value)}
-                className="w-full h-32 bg-slate-50 border-none rounded-[2rem] p-6 focus:ring-2 focus:ring-indigo-100 transition-all resize-none font-medium text-slate-700"
-                placeholder="Обоснуйте оценку или дайте рекомендацию..."
-              />
+            <div className="w-16 h-16 rounded-full border-4 border-slate-50 flex items-center justify-center relative">
+                <svg className="w-full h-full -rotate-90">
+                    <circle 
+                        cx="32" cy="32" r="28" fill="transparent" 
+                        stroke="currentColor" strokeWidth="4" 
+                        className="text-slate-100" 
+                    />
+                    <circle 
+                        cx="32" cy="32" r="28" fill="transparent" 
+                        stroke="currentColor" strokeWidth="4" 
+                        strokeDasharray={176}
+                        strokeDashoffset={176 - (176 * (Object.keys(pendingEvaluations).length / (competencies.length || 1)))}
+                        className="text-indigo-600 transition-all duration-1000"
+                    />
+                </svg>
+                <CheckCircle2 className="absolute text-indigo-600" size={20} />
             </div>
+          </div>
+          
+          <button
+            onClick={handleFinalSave}
+            disabled={!isFormComplete || saving}
+            className={`w-full md:w-auto px-12 py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] transition-all duration-300 ${
+              isFormComplete 
+                ? 'bg-slate-900 text-white shadow-xl shadow-slate-200 hover:bg-indigo-600 hover:-translate-y-1' 
+                : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+            }`}
+          >
+            {saving ? 'Сохранение...' : 'Сохранить оценку'}
+          </button>
+        </div>
+      </div>
 
-            <button
-              onClick={handleSaveEvaluation}
-              disabled={!selectedCompetencyId || saving}
-              className="w-full bg-slate-900 hover:bg-indigo-600 disabled:bg-slate-200 text-white font-black py-5 rounded-[2rem] transition-all shadow-xl active:scale-[0.98] uppercase tracking-widest text-sm"
-            >
-              {saving ? 'Сохранение...' : 'Зафиксировать результат'}
-            </button>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div className="lg:col-span-8 space-y-6">
+          <div className="flex items-center justify-between px-4 mb-4">
+             <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Требуемые навыки</h3>
+             {isFormComplete && (
+                 <span className="text-[10px] font-black text-emerald-500 uppercase bg-emerald-50 px-3 py-1 rounded-full animate-bounce">
+                     Оценка проведена!
+                 </span>
+             )}
+          </div>
+          
+          {competencies.length === 0 ? (
+            <div className="bg-white rounded-[3rem] p-20 text-center border-2 border-dashed border-slate-100">
+                <AlertCircle className="mx-auto text-slate-200 mb-4" size={48} />
+                <p className="text-slate-400 font-bold uppercase text-xs tracking-widest">Компетенции не найдены...</p>
+            </div>
+          ) : (
+            competencies.map((c) => {
+                const isEvaled = pendingEvaluations[c.id] !== undefined;
+                const isActive = activeId === c.id;
+    
+                return (
+                  <div 
+                    key={c.id} 
+                    className={`group transition-all duration-500 rounded-[2.5rem] border ${
+                      isActive 
+                        ? 'bg-white border-indigo-100 shadow-2xl shadow-indigo-100/50 scale-[1.01]' 
+                        : 'bg-white/70 border-white hover:border-slate-200'
+                    }`}
+                  >
+                    <div 
+                      onClick={() => setActiveId(isActive ? null : c.id)}
+                      className="p-8 cursor-pointer flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-6">
+                        <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all duration-500 ${
+                          isEvaled ? 'bg-emerald-500 text-white rotate-[360deg]' : isActive ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-300'
+                        }`}>
+                          {isEvaled ? <CheckCircle2 size={28} /> : <Award size={28} />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <h4 className={`text-xl font-black tracking-tight transition-colors ${isActive ? 'text-indigo-900' : 'text-slate-800'}`}>
+                                {c.name}
+                            </h4>
+                            {c.is_key && <span className="text-[9px] font-black uppercase bg-rose-100 text-rose-500 px-2 py-1 rounded-lg">Ключевая</span>}
+                          </div>
+                          <div className="flex items-center gap-4 mt-1">
+                             <p className="text-xs font-bold text-slate-400">Цель: <span className="text-indigo-500">{c.required_level || 0}%</span></p>
+                             {isEvaled && (
+                                 <span className="text-xs font-black text-emerald-500">Выставлено: {pendingEvaluations[c.id].score}%</span>
+                             )}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronDown className={`text-slate-200 transition-transform duration-500 ${isActive ? 'rotate-180 text-indigo-600' : 'group-hover:text-slate-400'}`} />
+                    </div>
+    
+                    <AnimatePresence>
+                      {isActive && (
+                        <motion.div 
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-8 pb-8 pt-2">
+                            <div className="bg-slate-50/80 rounded-[2rem] p-8">
+                                <p className="text-slate-500 mb-10 leading-relaxed font-medium text-sm border-l-4 border-indigo-100 pl-6">
+                                    {c.description || 'Инструкции и описание для данной компетенции не заполнены.'}
+                                </p>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                                  <div className="space-y-6">
+                                    <div className="flex justify-between items-end">
+                                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Уровень мастерства</label>
+                                      <span className="text-5xl font-black text-indigo-600 tracking-tighter">
+                                        {pendingEvaluations[c.id]?.score ?? 50}<span className="text-2xl text-indigo-200">%</span>
+                                      </span>
+                                    </div>
+                                    <input 
+                                      type="range"
+                                      min="0" max="100" step="1"
+                                      value={pendingEvaluations[c.id]?.score ?? 50}
+                                      onChange={(e) => {
+                                          const val = Number(e.target.value);
+                                          setPendingEvaluations(prev => ({
+                                              ...prev,
+                                              [c.id]: { score: val, comment: prev[c.id]?.comment || '' }
+                                          }));
+                                      }}
+                                      className="w-full h-2 bg-white rounded-lg appearance-none cursor-pointer accent-indigo-600 border border-slate-100 shadow-sm"
+                                    />
+                                    <div className="flex justify-between text-[10px] font-black text-slate-300 uppercase">
+                                        <span>Новичок</span>
+                                        <span>Эксперт</span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-4">
+                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Комментарий руководителя</label>
+                                    <div className="relative group">
+                                      <MessageSquare className="absolute left-5 top-5 text-slate-300 group-focus-within:text-indigo-400 transition-colors" size={18} />
+                                      <textarea 
+                                        placeholder="Опишите сильные стороны или зоны роста..."
+                                        value={pendingEvaluations[c.id]?.comment ?? ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setPendingEvaluations(prev => ({
+                                                ...prev,
+                                                [c.id]: { score: prev[c.id]?.score ?? 50, comment: val }
+                                            }));
+                                        }}
+                                        className="w-full h-32 pl-14 pr-6 py-5 bg-white border border-slate-100 rounded-[1.5rem] text-sm focus:ring-4 ring-indigo-500/5 focus:border-indigo-200 transition-all resize-none font-medium text-slate-700 shadow-inner"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="mt-10 flex justify-end">
+                                  <button 
+                                    onClick={() => {
+                                      if (pendingEvaluations[c.id] === undefined) {
+                                          setPendingEvaluations(prev => ({ ...prev, [c.id]: { score: 50, comment: '' } }));
+                                      }
+                                      setActiveId(null);
+                                    }}
+                                    className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg hover:shadow-emerald-200"
+                                  >
+                                    Подтвердить
+                                  </button>
+                                </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+            })
+          )}
+        </div>
+
+        {/* СЕКЦИЯ ИСТОРИИ - ОБНОВЛЕННАЯ ЛОГИКА (АККОРДЕОН) */}
+        <div className="lg:col-span-4 space-y-8">
+          <div className="bg-white rounded-[3rem] p-8 border border-white shadow-xl shadow-slate-200/40">
+            <h4 className="font-black text-slate-900 flex items-center gap-3 mb-8 uppercase text-xs tracking-widest">
+              <History size={18} className="text-indigo-500" /> История по сессиям
+            </h4>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              {groupedHistory.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-[2rem] border border-dashed border-slate-100">
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-tighter italic">История пуста...</p>
+                </div>
+              ) : (
+                groupedHistory.map(([date, items]) => {
+                  const isExpanded = !!expandedDates[date];
+                  return (
+                    <div key={date} className="overflow-hidden border-b border-slate-50 pb-2">
+                      <button 
+                        onClick={() => toggleDate(date)}
+                        className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all ${
+                          isExpanded ? 'bg-indigo-50/50' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isExpanded ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                            <Calendar size={14} />
+                          </div>
+                          <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
+                            Оценка от {date}
+                          </span>
+                        </div>
+                        <ChevronDown 
+                          size={16} 
+                          className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-indigo-600' : ''}`} 
+                        />
+                      </button>
+
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="space-y-3 pt-4 pl-4 pr-2 pb-2">
+                              {items.map(ev => (
+                                <div key={ev.id} className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm transition-all group">
+                                  <div className="flex justify-between items-center mb-1">
+                                    <span className="font-bold text-slate-700 text-[11px] uppercase tracking-tight">{ev.competency_name}</span>
+                                    <span className="text-sm font-black text-indigo-600">{ev.value}%</span>
+                                  </div>
+                                  {ev.comment && (
+                                    <p className="mt-2 text-[10px] text-slate-500 leading-relaxed italic border-t border-slate-50 pt-2">
+                                      {ev.comment}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
 
-          <div className="mt-12 border-t border-slate-50 pt-10">
-            <h4 className="font-black text-slate-900 mb-6 flex items-center justify-between">
-              История оценок 
-              <span className="bg-indigo-50 text-indigo-600 text-xs px-4 py-1 rounded-full">{evaluations.length}</span>
-            </h4>
-
-            <div className="space-y-4 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
-              {evaluations.length === 0 ? (
-                <p className="text-center py-10 text-slate-300 font-medium italic">История пуста</p>
-              ) : (
-                evaluations.map(ev => (
-                  <div key={ev.id} className="bg-slate-50/50 p-6 rounded-[2rem] border border-white">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-bold text-slate-800">{ev.competency_name}</span>
-                      <span className="text-2xl font-black text-indigo-600">{ev.value}</span>
-                    </div>
-                    {ev.comment && <p className="text-sm text-slate-500 font-medium leading-snug">{ev.comment}</p>}
-                    <p className="text-[10px] font-bold text-slate-300 mt-4 uppercase tracking-wider">
-                      {new Date(ev.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                  </div>
-                ))
-              )}
+          <div className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-indigo-500/10 rounded-full group-hover:scale-150 transition-transform duration-1000"></div>
+            <h4 className="font-black mb-6 uppercase text-[10px] tracking-[0.3em] text-indigo-400">Советы по оценке</h4>
+            <div className="space-y-6 relative z-10">
+              <div className="flex gap-4">
+                  <div className="shrink-0 w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center text-[10px] font-bold text-indigo-300">1</div>
+                  <p className="text-xs text-slate-400 leading-relaxed">Используйте ползунок для определения уровня навыка относительно <span className="text-white">целевого значения</span>.</p>
+              </div>
+              <div className="flex gap-4">
+                  <div className="shrink-0 w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center text-[10px] font-bold text-indigo-300">2</div>
+                  <p className="text-xs text-slate-400 leading-relaxed">Кнопка <span className="text-white">«Зафиксировать всё»</span> отправит данные сразу по всем навыкам сотрудника.</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+      `}</style>
     </div>
   );
 }
