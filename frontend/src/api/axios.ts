@@ -1,33 +1,66 @@
 import axios from 'axios';
 
+const BASE_URL = 'http://127.0.0.1:8000/api/';
+
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api/',
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// === INTERCEPTOR ЗАПРОСА (добавляет токен) ===
+// Интерцептор запроса
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
-  if (token) {
+  if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
-    console.log(`[Axios] Токен добавлен → ${config.url}`);
-  } else {
-    console.log(`[Axios] Токен НЕ найден для ${config.url}`);
-  }
+  } 
   return config;
-});
+}, (error) => Promise.reject(error));
 
-// === INTERCEPTOR ОТВЕТА (обрабатывает 401) ===
+// Интерцептор ответа
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      console.log('[Axios] 401 → разлогиниваем');
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Если 401 ошибка, не повтор, не запрос к эндпоинтам токенов
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('token/')) {
+      originalRequest._retry = true;
+      
+      const refreshToken = localStorage.getItem('refresh_token');
+
+      if (refreshToken) {
+        try {
+          const res = await axios.post(`${BASE_URL}token/refresh/`, {
+            refresh: refreshToken,
+          });
+
+          const { access, refresh } = res.data;
+          
+          // сохраняем access-токен
+          if (access) {
+            localStorage.setItem('access_token', access);
+
+            // обновляем заголовок в упавшем запросе
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${access}`;
+            }
+          }
+          // обновляем refresh-токен, если сервер прислал новый
+          if (refresh) localStorage.setItem('refresh_token', refresh);
+          
+          return api(originalRequest);
+        } catch (refreshError) {
+          console.error('[Axios] Сессия истекла');
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+          return Promise.reject(refreshError);
+        }
+      }
     }
     return Promise.reject(error);
   }

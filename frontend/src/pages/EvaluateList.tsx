@@ -16,6 +16,7 @@ interface Employee {
   position_name: string;
   department_name: string;
   status: string;
+  role: string;
 }
 
 export default function EvaluateList() {
@@ -33,15 +34,29 @@ export default function EvaluateList() {
 
   // Загрузка данных
   useEffect(() => {
-    if (authloading) return;
+    if (authloading || !user) return;
+
     api.get<Employee[]>('employees/')
-      .then(res => {
-        const filtered = res.data.filter(emp => emp.id !== user?.id);
-        setEmployees(filtered);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [user?.id, authloading]);
+    .then(res => {
+      const filtered = res.data.filter(emp => {
+        if (emp.id === user.id) return false;
+
+        if (user.role === 'manager') {
+          const forbiddenRoles = ['manager', 'director'];
+          return !forbiddenRoles.includes(emp.role);
+        }
+
+        if (user.role === 'director') {
+          return emp.role === 'manager';
+        }
+        return true;
+      });
+      setEmployees(filtered);
+      setLoading(false);
+    })
+    .catch(() => setLoading(false));
+  }, [user, authloading])
+    
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

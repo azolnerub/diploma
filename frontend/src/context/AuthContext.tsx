@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import axios from 'axios';
 import api from '../api/axios';
 
 interface User {
@@ -14,84 +15,89 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (accessToken: string, refreshToken: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-async function tryRefreshToken(): Promise<boolean> {
-  const refresh = localStorage.getItem('refresh_token');
-  if (!refresh) return false;
-  try {
-    const res = await api.post<{ access: string }>('token/refresh/', { refresh });
-    localStorage.setItem('access_token', res.data.access);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
+    let accessToken = localStorage.getItem('access_token');
+    const refreshToken = localStorage.getItem('refresh_token');
+
+    // если нет вообще никаких токенов - выход
+    if (!accessToken && !refreshToken) {
       setUser(null);
       setLoading(false);
       return;
     }
+
+    // ПРОАКТИВНЫЙ РЕФРЕШ
+    // если access_token пропал, но есть refresh_token - пробуем восстановиться
+    if (!accessToken && refreshToken) {
+      try {
+        const res = await axios.post('http://127.0.0.1:8000/api/token/refresh/', {
+          refresh: refreshToken,
+        });
+        accessToken = res.data.access;
+
+        if (accessToken) localStorage.setItem('access_token', accessToken); 
+
+        if (res.data.refresh) localStorage.setItem('refresh_token', res.data.refresh);
+      } catch {
+        // если даже рефреш не помог - выход
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+    }
+    
+    // загружаем данные пользователя
     try {
       const res = await api.get<User>('me/');
       setUser(res.data);
-    } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 401) {
-        const refreshed = await tryRefreshToken();
-        if (refreshed) {
-          try {
-            const res = await api.get<User>('me/');
-            setUser(res.data);
-            return;
-          } catch {
-            // после обновления токена /me/ всё равно упал
-          }
-        }
-      }
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+    } catch {
+      console.error('[AuthContext] Не удалось загрузить пользователя');
       setUser(null);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Запускается один раз при монтировании
   useEffect(() => {
     fetchUser();
 
-    // Для синхронизации между вкладками
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'access_token') {
-        fetchUser();
-      }
+      if (e.key === 'access_token' || e.key === 'refresh_token') fetchUser();
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [fetchUser]);
 
-  // Вызывается со страницы логина после успешной авторизации
   const login = useCallback(async (accessToken: string, refreshToken: string) => {
     localStorage.setItem('access_token', accessToken);
     localStorage.setItem('refresh_token', refreshToken);
     await fetchUser();
   }, [fetchUser]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const refreshToken = localStorage.getItem('refresh_token');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     setUser(null);
+    
+    if (refreshToken) {
+      try {
+        await api.post('token/logout/', { refresh: refreshToken });
+      } catch (err) {
+        console.warn('[AuthContext] Logout на сервере не удался', err);
+      }
+    }
     window.location.href = '/login';
   }, []);
 

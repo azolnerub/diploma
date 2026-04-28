@@ -22,8 +22,8 @@ function App() {
         {/* Авторизация */}
         <Route path="/login" element={<Login/>}/>
         {/* Общие страницы - профиль и смена пароля*/}
-        <Route path="/profile" element={<UserProfile/>}/>
-        <Route path="/profile/change-password" element={<ChangePassword/>}/>
+        <Route path="/profile" element={<ProtectedRoute><UserProfile/></ProtectedRoute>}/>
+        <Route path="/profile/change-password" element={<ProtectedRoute><ChangePassword/></ProtectedRoute>}/>
         {/* Страницы для HR и Руководителя - панель управления, список сотрудников, резерв, анализ соответствия, список вакансий, список кандидатов*/}
         <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['hr', 'manager', 'director']}><Dashboard/></ProtectedRoute>}/>
         <Route path="/employees" element={<ProtectedRoute allowedRoles={['hr', 'manager', 'director']}><Employees/></ProtectedRoute>}/>

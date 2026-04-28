@@ -69,20 +69,20 @@ class EmployeeCreateView(generics.CreateAPIView):
             if not username or not password:
                 return Response({"detail": "Логин и пароль обязательны"}, status=400)
 
-            if system_role not in ['employee', 'hr', 'manager', 'director']:
-                system_role = 'employee'
-
-            # 1. Создаем пользователя
+            # 1. Создаем или получаем пользователя
             user, created = User.objects.get_or_create(
                 username=username,
-                defaults={'role': system_role, 'is_active': True}
+                defaults={
+                    'role': system_role if system_role in ['employee', 'hr', 'manager', 'director'] else 'employee',
+                    'is_active': True
+                }
             )
 
             if created:
                 user.set_password(password)
                 user.save()
 
-            # 2. Создаем сотрудника
+            # 2. Создаем сотрудника (без автоматических оценок)
             employee = Employee.objects.create(
                 user=user,
                 full_name=request.data.get('full_name'),
@@ -92,12 +92,8 @@ class EmployeeCreateView(generics.CreateAPIView):
                 status=request.data.get('status', 'Работает'),
             )
 
-            if employee.position:
-                employee.competencies.set(employee.position.competencies.all())
-
-            extra_comp_ids = request.data.get('competency_ids', [])
-            if isinstance(extra_comp_ids, list) and extra_comp_ids:
-                employee.competencies.add(*extra_comp_ids)
+            # Больше никакой инициализации Evaluation здесь нет.
+            # Компетенции появятся в профиле только после первой оценки менеджером.
 
             serializer = self.get_serializer(employee)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -255,13 +251,18 @@ class AddCompetencyToEmployeeView(generics.CreateAPIView):
     def post(self, request, employee_id):
         target_employee = get_object_or_404(Employee, id=employee_id)
         user = request.user
+        target_role = target_employee.user.role
 
-        if user.role == 'director':
-            if target_employee.user.role != 'manager':
-                raise PermissionDenied("Директор оценивает только руководителей")
-        elif user.role == 'manager':
+        if user.role == 'manager':
+            if target_role in ['manager', 'director']:
+                raise PermissionDenied("Руководитель не может оценивать других руководителей или директоров")
+
             if not hasattr(user, 'employee') or target_employee.department != user.employee.department:
                 raise PermissionDenied("Вы не можете оценивать сотрудников из другого отдела")
+
+        elif user.role == 'director':
+            if target_role != 'manager':
+                raise PermissionDenied("Директор оценивает только руководителей")
 
         competency_id = request.data.get('competency_id')
         value = request.data.get('value', 50)
@@ -274,6 +275,8 @@ class AddCompetencyToEmployeeView(generics.CreateAPIView):
             comment=comment,
             manager=request.user
         )
+
+        check_and_auto_reserve(target_employee)
 
         return Response({"message": "Оценка успешно добавлена", "evaluation_id": evaluation.id}, status=status.HTTP_201_CREATED)
 
@@ -294,8 +297,7 @@ class PositionCompetenciesView(generics.ListAPIView):
 
     def get_queryset(self):
         position_id = self.kwargs['pk']
-        position = get_object_or_404(Position, pk=position_id)
-        return position.competencies.all()
+        return Competency.objects.filter(positionprofile__position_id=position_id).distinct()
 
 # Обновление компетенций должности
 class PositionCompetenciesUpdateView(APIView):
@@ -308,10 +310,24 @@ class PositionCompetenciesUpdateView(APIView):
         if not isinstance(competency_ids, list):
             return Response({"detail": "competency_ids должен быть списком"}, status=400)
 
-        position.competencies.set(competency_ids)
+        # 1. Удаляем старые связи в профиле
+        PositionProfile.objects.filter(position=position).delete()
+
+        # 2. Создаем новые связи
+        new_profile_entries = [
+            PositionProfile(
+                position=position,
+                competency_id=c_id,
+                required_level=60,  # Значение по умолчанию
+                weight=0.1          # Значение по умолчанию
+            ) for c_id in competency_ids
+        ]
+
+        if new_profile_entries:
+            PositionProfile.objects.bulk_create(new_profile_entries)
 
         return Response({
-            "message": "Компетенции должности успешно обновлены",
+            "message": "Профиль должности успешно обновлен",
             "position": position.name,
             "competency_count": len(competency_ids)
         }, status=200)
@@ -433,6 +449,8 @@ def calculate_position_match(employee, position_id, role_id=None):
     weighted_score = 0.0
     breakdown = []
 
+    comp_names = {c.id: c.name for c in Competency.objects.filter(id__in=[r['competency_id'] for r in requirements])}
+
     for req in requirements:
         current = evaluations.get(req['competency_id'], 0)
         ratio = min(1.0, current / req['required_level']) if req['required_level'] > 0 else 0
@@ -442,7 +460,7 @@ def calculate_position_match(employee, position_id, role_id=None):
         weighted_score += score_contrib
 
         breakdown.append({
-            'competency_name': Competency.objects.get(id=req['competency_id']).name,
+            'competency_name': comp_names.get(req['competency_id'], "Неизвестно"),
             'current': current,
             'required': req['required_level'],
             'weight': round(req['weight'], 3),
@@ -463,26 +481,38 @@ def calculate_position_match(employee, position_id, role_id=None):
 
 # Расчет соответствия сотрудника целевой роли
 def calculate_role_match(employee, role_id):
-    """Расчёт соответствия роли + всех должностей внутри роли"""
     role = get_object_or_404(Role, pk=role_id)
     profile_items = RoleProfile.objects.filter(role=role).select_related('competency')
+
+    # Логирование для отладки
+    print(f"DEBUG: Найдено компетенций в профиле роли {role.name}: {profile_items.count()}")
+
+    # Получаем последние оценки сотрудника
+    evals = {e.competency_id: e.value for e in Evaluation.objects.filter(employee=employee)}
+    print(f"DEBUG: Найдено оценок у сотрудника {employee.full_name}: {len(evals)}")
 
     total_weight = 0.0
     weighted_sum = 0.0
     evaluated_count = 0
     total_competencies = profile_items.count()
 
-    evals = {e.competency_id: e.value for e in Evaluation.objects.filter(employee=employee)}
     breakdown = []
     gaps = []
 
     for item in profile_items:
-        req = item.required_level
+        req = float(item.required_level)
         w = float(item.weight)
         total_weight += w
 
-        current = evals.get(item.competency_id, 0)
-        ratio = min(1.0, current / req) if req > 0 else 0.0
+        current = float(evals.get(item.competency_id, 0))
+
+        # Расчет соответствия по конкретной компетенции
+        if req > 0:
+            ratio = min(1.0, current / req)
+        else:
+            # Если требование 0, а оценка есть — считаем как 100% соответствие
+            ratio = 1.0 if current > 0 else 0.0
+
         weighted_sum += ratio * w
 
         if current > 0:
@@ -498,27 +528,44 @@ def calculate_role_match(employee, role_id):
             'is_key': item.is_key
         })
 
+        # Формируем список разрывов (gaps), если соответствие меньше 70%
         if ratio < 0.7:
+            # Считаем разницу, но не уходим в минус
+            gap_value = max(0, req - current)
             gaps.append({
                 'competency_name': item.competency.name,
-                'gap': req - current,
+                'gap': round(gap_value, 1),
                 'is_key': item.is_key
             })
 
-    match_index = (weighted_sum / total_weight * 100) if total_weight > 0 else 0.0
+    # Основной расчет индекса роли
+    if total_weight > 0:
+        match_index = (weighted_sum / total_weight) * 100
+    else:
+        # Запасной вариант: среднее арифметическое, если веса не проставлены
+        match_index = (weighted_sum / total_competencies * 100) if total_competencies > 0 else 0.0
+
     coverage = (evaluated_count / total_competencies * 100) if total_competencies > 0 else 0.0
 
+    # Сортировка рекомендаций: сначала ключевые компетенции, затем по величине разрыва
     recommendations = sorted(gaps, key=lambda x: (x['is_key'], x['gap']), reverse=True)[:4]
 
-    # Должности внутри роли
+    # Анализ должностей, входящих в эту роль
     positions_data = []
     for position in role.positions.all():
-        pos_match = calculate_position_match(employee, position.id, role_id)
+        # Вызываем вашу существующую функцию для должностей
+        pos_match = calculate_position_match(employee, position.id)
         positions_data.append({
             'position_id': position.id,
             'position_name': position.name,
-            'match_index': pos_match.get('match_index', 0)
+            'match_index': round(pos_match.get('match_index', 0), 1)
         })
+
+    # Если профиль роли пуст (0%), но должности рассчитаны —
+    # подтягиваем среднее значение по должностям, чтобы не показывать 0
+    if match_index == 0 and positions_data:
+        indices = [p['match_index'] for p in positions_data]
+        match_index = sum(indices) / len(indices)
 
     return {
         'role_name': role.name,
@@ -674,6 +721,45 @@ class RoleDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
     permission_classes = [IsManagement]
+
+# Автоматическое добавление в резерв
+def check_and_auto_reserve(employee):
+    # 1. Берем должности того же департамента
+    potential_positions = Position.objects.filter(
+        department=employee.department
+    ).exclude(id=employee.position_id)
+
+    for position in potential_positions:
+        match_data = calculate_position_match(employee, position.id)
+
+        # 2. Если соответствие >= 50%
+        if match_data.get('match_index', 0) >= 50:
+
+            # 3. СТРОГИЙ ПОИСК: Ищем роли, в которые ВХОДИТ эта должность
+            # Мы используем обратную связь 'roles' из ManyToManyField
+            valid_roles = position.roles.filter(department=employee.department)
+
+            # Берем первую подходящую. Если должность не привязана к ролям,
+            # target_role будет None, и запись в резерв не создастся (или создастся без роли)
+            target_role = valid_roles.first()
+
+            # Если мы хотим добавлять в резерв ТОЛЬКО если есть понятная роль:
+            if target_role:
+                reserve_item, created = Reserve.objects.get_or_create(
+                    employee=employee,
+                    position=position,
+                    defaults={
+                        'target_role': target_role,
+                        'priority': 1
+                    }
+                )
+
+                if not created and reserve_item.target_role != target_role:
+                    reserve_item.target_role = target_role
+                    reserve_item.save()
+            else:
+                # Опционально: логируем, что для должности не найдена роль
+                print(f"Должность {position.name} не привязана ни к одной роли в департаменте")
 
 # Добавление в резерв
 class AddToReserveView(APIView):

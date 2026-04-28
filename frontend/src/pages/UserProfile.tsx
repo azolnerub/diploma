@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../hooks/useAuth';
-import { TrendingUp, Award, Target, History, Users, MessageSquare, LayoutDashboard, ChevronDown, KeyRound, Zap } from 'lucide-react';
+import { TrendingUp, Award, Target, History, LogOut, Users, MessageSquare, LayoutDashboard, ChevronDown, KeyRound, Zap } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, PolarRadiusAxis } from 'recharts';
 
 interface RadarPoint {
@@ -46,7 +46,6 @@ interface ProfileData {
   feedback: FeedbackSession[];
 }
 
-// Хелпер для локализации периодов (Кварталы/Полугодия)
 const formatPeriod = (periodStr: string) => {
   if (periodStr.includes('Q')) {
     const [year, q] = periodStr.split('-');
@@ -70,7 +69,7 @@ const Avatar = ({ name }: { name?: string }) => {
 };
 
 export default function UserProfile() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +91,11 @@ export default function UserProfile() {
   const handleMatchAnalysis = (trajectory: Trajectory) => {
     if (!data?.employee_id || !trajectory.role_id) return;
     navigate(`/reserve/match/role/${data.employee_id}/${trajectory.role_id}`);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   if (loading) {
@@ -140,6 +144,12 @@ export default function UserProfile() {
               <span>Панель управления</span>
             </button>
           )}
+          <button 
+          onClick={handleLogout}
+          className="flex items-center justify-center w-[56px] h-[56px] bg-rose-50 text-rose-500 rounded-[20px] hover:bg-rose-500 hover:text-white transition-all active:scale-95 border border-rose-100"
+          >
+            <LogOut size={20} />
+          </button>
         </div>
       </div>
 

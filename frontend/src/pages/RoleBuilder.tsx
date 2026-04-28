@@ -41,7 +41,7 @@ interface Role {
 interface DraftItem {
   competency: number;
   competency_name: string;
-  required_level: string | number; // Изменено для поддержки пустой строки при вводе
+  required_level: string | number; 
   weight: number;
   is_key: boolean;
 }

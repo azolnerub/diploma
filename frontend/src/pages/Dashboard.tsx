@@ -1,23 +1,22 @@
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { Users, Trophy, Star, LogOut, LayoutDashboard, UserCircle } from 'lucide-react';
+import { Users, Trophy, Star, LayoutDashboard, UserCircle } from 'lucide-react';
 
 export default function Dashboard() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
 
-    useEffect(() => {
+  useEffect(() => {
     const role = user?.role || '';
     const hasAccess = ['hr', 'manager', 'director'].includes(role);
     if (!loading && user && !hasAccess) {
       navigate('/profile', { replace: true });
-  }
+    }
   }, [user, loading, navigate]);
   
   if (loading) return <DashboardLoader />;
   if (!user) return null; 
-
 
   const firstName = user.full_name.split(' ')[1] || user.full_name.split(' ')[0];
 
@@ -39,24 +38,18 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex flex-col items-end border-r border-slate-200 pr-6">
+            <div className="flex flex-col items-end">
               <p className="text-sm font-black text-slate-800">{user.full_name}</p>
               <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md uppercase tracking-wider">
                 {user.role}
               </span>
             </div>
-
-            <button
-              onClick={logout}
-              className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-100 hover:bg-red-50 rounded-2xl transition-all group"
-              title="Выйти из системы"
-            >
-              <LogOut size={20} className="group-hover:translate-x-0.5 transition-transform" />
-            </button>
+            {/* Кнопка Logout удалена */}
           </div>
         </div>
       </nav>
 
+      {/* Остальной код main без изменений */}
       <main className="max-w-7xl mx-auto px-6 py-12">
         <header className="mb-12 relative">
           <div className="absolute -top-10 -left-10 w-40 h-40 bg-indigo-100/50 rounded-full blur-3xl -z-10" />
@@ -69,7 +62,6 @@ export default function Dashboard() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-[280px]">
-          
           <div
             onClick={() => navigate(user?.role === 'hr' ? '/hr' : '/employees')}
             className="md:col-span-8 bg-white border border-slate-200 rounded-[2.5rem] p-10 flex flex-col justify-between hover:shadow-2xl hover:shadow-indigo-500/5 hover:border-indigo-200 transition-all cursor-pointer group relative overflow-hidden"
@@ -90,7 +82,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Мой профиль */}
           <div
             onClick={() => navigate('/profile')}
             className="md:col-span-4 bg-white border border-slate-200 rounded-[2.5rem] p-10 hover:shadow-2xl hover:border-indigo-400 transition-all cursor-pointer group flex flex-col justify-between relative overflow-hidden"
@@ -107,7 +98,6 @@ export default function Dashboard() {
              </div>
           </div>
 
-          {/* Оценки */}
           {(user?.role === 'manager' || user?.role === 'director') && (
             <div
               onClick={() => navigate('/evaluate')}
@@ -127,7 +117,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Кадровый резерв */}
           <div
             onClick={() => navigate('/reserve')}
             className="md:col-span-4 bg-white border border-slate-200 rounded-[2.5rem] p-10 hover:shadow-2xl hover:border-emerald-200 transition-all cursor-pointer group flex flex-col justify-between"

@@ -22,7 +22,6 @@ class Department(models.Model):
 class Position(models.Model):
     name = models.CharField(max_length=100, verbose_name="Название должности")
     department = models.ForeignKey(Department, on_delete=models.CASCADE)
-    competencies = models.ManyToManyField('Competency', blank=True, related_name='positions')
 
     def __str__(self):
         return self.name
@@ -48,7 +47,6 @@ class Employee(models.Model):
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True)
     hire_date = models.DateField()
     status = models.CharField(max_length=50, default="Активен")
-    competencies = models.ManyToManyField('Competency', blank=True, related_name='employees')
 
     def __str__(self):
         return self.full_name

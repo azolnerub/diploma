@@ -13,7 +13,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     position_name = serializers.CharField(source='position.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True)
     department_id = serializers.PrimaryKeyRelatedField(source='department', queryset=Department.objects.all())
-    competencies = CompetencySerializer(many=True, read_only=True)
+    competencies = serializers.SerializerMethodField()
     position_id = serializers.PrimaryKeyRelatedField(source='position',  queryset=Position.objects.all())
     dynamics_score = serializers.SerializerMethodField()
     in_reserve = serializers.SerializerMethodField()
@@ -23,6 +23,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = ['id', 'full_name', 'position_name', 'department_name', 'department_id', 'hire_date',
                   'status', 'competencies', 'dynamics_score', 'in_reserve', 'reserved_positions', 'position_id', 'role']
+
+    def get_competencies(self, obj):
+        comp_ids = Evaluation.objects.filter(employee=obj).values_list('competency_id', flat=True).distinct()
+        competencies = Competency.objects.filter(id__in=comp_ids)
+        return CompetencySerializer(competencies, many=True).data
 
     def get_dynamics_score(self, obj):
         from .views import calculate_dynamics_score
@@ -84,7 +89,7 @@ class RoleProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoleProfile
         fields = ['id', 'competency', 'competency_name', 'category_name',
-                  'required_level', 'weight']
+                  'required_level', 'weight', 'is_key']
 
 class PositionProfileSerializer(serializers.ModelSerializer):
     competency_name = serializers.CharField(source='competency.name', read_only=True)

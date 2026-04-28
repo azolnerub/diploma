@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Shield, RefreshCw, CheckCircle2, Users, Target, X, ArrowLeft, ChevronDown, Filter, Briefcase, Search } from 'lucide-react';
-import axios from 'axios';
+import { Shield, RefreshCw, CheckCircle2, Users, ArrowLeft, ChevronDown, Filter, Briefcase, Search } from 'lucide-react';
 
 interface ReservedPosition {
   id: number;
@@ -28,12 +27,6 @@ interface RoleOption {
   department?: number | null;
 }
 
-interface PositionOption {
-  id: number;
-  name: string;
-  department_id: number;
-}
-
 export default function Reserve() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -41,8 +34,6 @@ export default function Reserve() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [allRoles, setAllRoles] = useState<RoleOption[]>([]);
-  const [allPositions, setAllPositions] = useState<PositionOption[]>([]);
-  const [rolesByPosition, setRolesByPosition] = useState<Record<number, RoleOption[]>>({});
   const [loading, setLoading] = useState(true);
 
   const [nameSearch, setNameSearch] = useState(searchParams.get('q') || '');
@@ -60,7 +51,6 @@ export default function Reserve() {
   const activeTab = (searchParams.get('tab') as 'all' | 'reserve' | 'positive' | 'negative') || 'all';
 
   const [selectedRoleForEmployee, setSelectedRoleForEmployee] = useState<Record<number, number>>({});
-  const [selectedTargetPositionForEmployee, setSelectedTargetPositionForEmployee] = useState<Record<number, number>>({});
 
   useEffect(() => {
     setSelectedPos(null);
@@ -69,14 +59,12 @@ export default function Reserve() {
 
   const fetchData = async () => {
     try {
-      const [empRes, roleRes, posRes] = await Promise.all([
+      const [empRes, roleRes] = await Promise.all([
         api.get<Employee[]>('employees/dynamics/'),
         api.get<RoleOption[]>('roles/'),
-        api.get<PositionOption[]>('positions/')
       ]);
       setEmployees(empRes.data || []);
       setAllRoles(roleRes.data || []);
-      setAllPositions(posRes.data || []);
     } catch (err) {
       console.error("Ошибка загрузки", err);
     } finally {
@@ -86,7 +74,6 @@ export default function Reserve() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Клик вне списков
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (posRef.current && !posRef.current.contains(event.target as Node)) setShowPosList(false);
@@ -105,56 +92,13 @@ export default function Reserve() {
     setSearchParams(params, { replace: true });
   }, [nameSearch, selectedPos, selectedDept, setSearchParams, activeTab, user?.role]);
 
-  const loadRolesForPosition = async (positionId: number) => {
-    if (!positionId || rolesByPosition[positionId]) return;
-    try {
-      const res = await api.get<RoleOption[]>(`/positions/${positionId}/roles/`);
-      setRolesByPosition(prev => ({ ...prev, [positionId]: res.data || [] }));
-    } catch (err) {
-      console.error('Ошибка ролей', err);
-    }
-  };
-
-  const toggleReserve = async (emp: Employee, posIdToRemove?: number) => {
-    const targetPosId = posIdToRemove || selectedTargetPositionForEmployee[emp.id];
-    const targetRoleId = selectedRoleForEmployee[emp.id];
-
-    if (!posIdToRemove && !targetPosId) {
-      alert("Выберите целевую должность");
-      return;
-    }
-
-    try {
-      if (posIdToRemove) {
-        await api.delete(`employees/${emp.id}/reserve/remove/`, {
-          data: { position_id: posIdToRemove }
-        });
-      } else {
-        await api.post(`employees/${emp.id}/reserve/add/`, {
-          position_id: targetPosId,
-          role_id: targetRoleId || null
-        });
-        setSelectedTargetPositionForEmployee(prev => ({ ...prev, [emp.id]: 0 }));
-        setSelectedRoleForEmployee(prev => ({ ...prev, [emp.id]: 0 }));
-      }
-      fetchData();
-    } catch (err) {
-      if (axios.isAxiosError(err)) {
-        alert(err.response?.data?.detail || "Ошибка обновления");
-      }
-    }
-  };
-
   const uniquePositions = useMemo(() => { 
     let baseEmployees = employees;
-
-    if (selectedDept) {
-      baseEmployees = baseEmployees.filter(e => e.department_name === selectedDept);
-    }
-    
+    if (selectedDept) baseEmployees = baseEmployees.filter(e => e.department_name === selectedDept);
     const names = baseEmployees.map(e => e.position_name).filter(Boolean);
     return Array.from(new Set(names)).sort();
   }, [employees, selectedDept])
+
   const uniqueDepts = useMemo(() => 
     Array.from(new Set(employees.map(e => e.department_name))).filter(Boolean).sort()
   , [employees]);
@@ -217,8 +161,6 @@ export default function Reserve() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-10">
-        
-        {/* Поиск по имени */}
         <div className="md:col-span-4 relative">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
@@ -230,7 +172,6 @@ export default function Reserve() {
           />
         </div>
 
-        {/* Фильтр по отделу */}
         {['hr', 'director'].includes(user?.role || '') && (
           <div className="md:col-span-3 relative" ref={deptRef}>
             <Filter className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -255,7 +196,6 @@ export default function Reserve() {
           </div>
         )}
 
-        {/* Фильтр по должности */}
         <div className={`${user?.role === 'hr' ? 'md:col-span-4' : 'md:col-span-7'} relative`} ref={posRef}>
           <Briefcase className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
@@ -278,7 +218,6 @@ export default function Reserve() {
           )}
         </div>
 
-        {/* Сброс */}
         <div className="md:col-span-1">
           <button 
             onClick={() => { setNameSearch(''); setSelectedPos(null); setSelectedDept(null); setPosSearch(''); setDeptSearch(''); }}
@@ -292,10 +231,7 @@ export default function Reserve() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredEmployees.map(emp => {
           const isNeg = emp.dynamics_score < 0;
-          const targetPosId = selectedTargetPositionForEmployee[emp.id];
-          const availableRoles = targetPosId && rolesByPosition[targetPosId] 
-            ? rolesByPosition[targetPosId] 
-            : allRoles.filter(r => r.department === null || r.department === emp.department_id);
+          const availableRoles = allRoles.filter(r => r.department === null || r.department === emp.department_id);
 
           return (
             <div key={emp.id} className={`bg-white border rounded-[40px] p-8 transition-all hover:shadow-2xl flex flex-col ${isNeg ? 'border-rose-100 bg-rose-50/20' : 'border-slate-100'}`}>
@@ -314,9 +250,8 @@ export default function Reserve() {
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">В резерве на:</label>
                   <div className="flex flex-wrap gap-2">
                     {emp.reserved_positions.map(p => (
-                      <span key={p.id} className="group text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl flex items-center gap-2 border border-emerald-100 hover:bg-rose-50 hover:text-rose-700 transition-all cursor-default">
+                      <span key={p.id} className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 cursor-default">
                         {p.name}
-                        <X size={14} className="cursor-pointer hover:scale-125 transition-transform" onClick={() => toggleReserve(emp, p.id)} />
                       </span>
                     ))}
                   </div>
@@ -324,28 +259,6 @@ export default function Reserve() {
               )}
 
               <div className="mt-auto space-y-5 pt-6 border-t border-slate-50">
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
-                    <Target size={10} /> Целевая должность
-                  </label>
-                  <select
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-xs focus:border-indigo-500 transition-all cursor-pointer"
-                    value={targetPosId || ''}
-                    onChange={(e) => {
-                      const pId = Number(e.target.value);
-                      setSelectedTargetPositionForEmployee(prev => ({ ...prev, [emp.id]: pId }));
-                      if (pId) loadRolesForPosition(pId);
-                    }}
-                  >
-                    <option value="">Выберите должность...</option>
-                    {allPositions
-                      .filter(p => p.department_id === emp.department_id)
-                      .filter(p => !emp.reserved_positions.some(rp => rp.id === p.id))
-                      .map(p => <option key={p.id} value={p.id}>{p.name}</option>)
-                    }
-                  </select>
-                </div>
-
                 <div className="space-y-2">
                   <label className="text-[9px] font-black uppercase tracking-widest ml-1 flex items-center gap-1 text-indigo-600">
                     <CheckCircle2 size={10} /> Целевая роль
@@ -360,29 +273,19 @@ export default function Reserve() {
                   </select>
                 </div>
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => navigate(`/reserve/match/role/${emp.id}/${selectedRoleForEmployee[emp.id]}`)}
-                    disabled={!selectedRoleForEmployee[emp.id]}
-                    className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-20 transition-all"
-                  >
-                    Анализ
-                  </button>
-                  <button
-                    onClick={() => toggleReserve(emp)}
-                    disabled={!targetPosId}
-                    className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-50 transition-all"
-                  >
-                    Добавить
-                  </button>
-                </div>
+                <button
+                  onClick={() => navigate(`/reserve/match/role/${emp.id}/${selectedRoleForEmployee[emp.id]}`)}
+                  disabled={!selectedRoleForEmployee[emp.id]}
+                  className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 disabled:opacity-20 transition-all shadow-lg shadow-slate-100"
+                >
+                  Анализ соответствия
+                </button>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Кнопка Кандидаты */}
       <div className="mt-16 flex justify-center pb-20">
         <button onClick={() => navigate('/reserve/positions')} className="group flex items-center gap-6 bg-white hover:bg-slate-900 border-2 border-slate-100 hover:border-slate-900 px-10 py-6 rounded-[40px] transition-all shadow-xl">
           <div className="w-14 h-14 bg-indigo-50 group-hover:bg-white/10 rounded-2xl flex items-center justify-center text-3xl transition-all"><Users size={32} /></div>

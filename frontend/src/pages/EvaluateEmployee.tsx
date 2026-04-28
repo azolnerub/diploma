@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../hooks/useAuth';
@@ -35,18 +35,21 @@ export default function EvaluateEmployee() {
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // Стейт для управления раскрытыми датами в истории
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
 
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await api.get(`employees/${id}/evaluations/`);
+      setEvaluations(res.data);
+    } catch (err) {
+      console.error("Ошибка при загрузке истории:", err);
+    }
+  }, [id]);
+
   const toggleDate = (date: string) => {
-    setExpandedDates(prev => ({
-      ...prev,
-      [date]: !prev[date]
-    }));
+    setExpandedDates(prev => ({ ...prev, [date]: !prev[date] }));
   };
 
-  // Группировка истории по датам
   const groupedHistory = useMemo(() => {
     const groups: Record<string, Evaluation[]> = {};
     evaluations.forEach(ev => {
@@ -61,20 +64,19 @@ export default function EvaluateEmployee() {
   }, [evaluations]);
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadInitialData = async () => {
       if (authLoading) return;
       try {
         const empRes = await api.get(`employees/${id}/`);
         const targetEmployee = empRes.data;
         setEmployee(targetEmployee);
 
-        const [evalRes, profileRes, rolesRes] = await Promise.allSettled([
-          api.get(`employees/${id}/evaluations/`),
+        const [profileRes, rolesRes] = await Promise.allSettled([
           api.get(`positions/${targetEmployee.position_id}/profile/`),
           api.get(`positions/${targetEmployee.position_id}/competencies-from-roles/`)
         ]);
 
-        if (evalRes.status === 'fulfilled') setEvaluations(evalRes.value.data);
+        await fetchHistory();
 
         const compMap = new Map<number, Competency>();
 
@@ -106,13 +108,13 @@ export default function EvaluateEmployee() {
 
         setCompetencies(Array.from(compMap.values()));
       } catch (err) {
-        console.error("Ошибка при загрузке данных оценки:", err);
+        console.error("Ошибка при загрузке данных:", err);
       } finally {
         setLoading(false);
       }
     };
-    loadData();
-  }, [id, authLoading]);
+    loadInitialData();
+  }, [id, authLoading, fetchHistory]);
 
   const isFormComplete = useMemo(() => {
     return competencies.length > 0 && competencies.every(c => pendingEvaluations[c.id] !== undefined);
@@ -122,6 +124,7 @@ export default function EvaluateEmployee() {
     if (!isFormComplete) return;
     setSaving(true);
     try {
+      // Отправляем все оценки
       await Promise.all(
         Object.entries(pendingEvaluations).map(([compId, data]) => 
           api.post(`employees/${id}/competencies/add/`, {
@@ -131,7 +134,20 @@ export default function EvaluateEmployee() {
           })
         )
       );
-    } catch {
+
+      // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Обновляем историю в стейте после сохранения
+      await fetchHistory();
+      
+      // Сбрасываем форму после успешного сохранения
+      setPendingEvaluations({});
+      setActiveId(null);
+      
+      // Опционально: разворачиваем сегодняшнюю дату в истории, чтобы пользователь увидел результат
+      const today = new Date().toLocaleDateString('ru-RU');
+      setExpandedDates(prev => ({ ...prev, [today]: true }));
+
+    } catch (err) {
+      console.error(err);
       alert("Не удалось сохранить оценки. Попробуйте позже.");
     } finally {
       setSaving(false);
@@ -147,6 +163,7 @@ export default function EvaluateEmployee() {
 
   return (
     <div className="p-4 md:p-10 max-w-7xl mx-auto bg-slate-50 min-h-screen font-sans">
+      {/* Шапка */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-12 gap-8">
         <div className="animate-in slide-in-from-left duration-700">
           <button 
@@ -216,14 +233,10 @@ export default function EvaluateEmployee() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        {/* Список компетенций */}
         <div className="lg:col-span-8 space-y-6">
           <div className="flex items-center justify-between px-4 mb-4">
              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Требуемые навыки</h3>
-             {isFormComplete && (
-                 <span className="text-[10px] font-black text-emerald-500 uppercase bg-emerald-50 px-3 py-1 rounded-full animate-bounce">
-                     Оценка проведена!
-                 </span>
-             )}
           </div>
           
           {competencies.length === 0 ? (
@@ -284,7 +297,7 @@ export default function EvaluateEmployee() {
                           <div className="px-8 pb-8 pt-2">
                             <div className="bg-slate-50/80 rounded-[2rem] p-8">
                                 <p className="text-slate-500 mb-10 leading-relaxed font-medium text-sm border-l-4 border-indigo-100 pl-6">
-                                    {c.description || 'Инструкции и описание для данной компетенции не заполнены.'}
+                                    {c.description || 'Описание не заполнено.'}
                                 </p>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
@@ -319,7 +332,7 @@ export default function EvaluateEmployee() {
                                     <div className="relative group">
                                       <MessageSquare className="absolute left-5 top-5 text-slate-300 group-focus-within:text-indigo-400 transition-colors" size={18} />
                                       <textarea 
-                                        placeholder="Опишите сильные стороны или зоны роста..."
+                                        placeholder="Опишите сильные стороны..."
                                         value={pendingEvaluations[c.id]?.comment ?? ''}
                                         onChange={(e) => {
                                             const val = e.target.value;
@@ -343,7 +356,7 @@ export default function EvaluateEmployee() {
                                     }}
                                     className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg hover:shadow-emerald-200"
                                   >
-                                    Подтвердить
+                                    Зафиксировать
                                   </button>
                                 </div>
                             </div>
@@ -357,7 +370,7 @@ export default function EvaluateEmployee() {
           )}
         </div>
 
-        {/* СЕКЦИЯ ИСТОРИИ - ОБНОВЛЕННАЯ ЛОГИКА (АККОРДЕОН) */}
+        {/* История сессий */}
         <div className="lg:col-span-4 space-y-8">
           <div className="bg-white rounded-[3rem] p-8 border border-white shadow-xl shadow-slate-200/40">
             <h4 className="font-black text-slate-900 flex items-center gap-3 mb-8 uppercase text-xs tracking-widest">
@@ -384,7 +397,7 @@ export default function EvaluateEmployee() {
                             <Calendar size={14} />
                           </div>
                           <span className="text-[11px] font-black text-slate-900 uppercase tracking-widest">
-                            Оценка от {date}
+                            {date}
                           </span>
                         </div>
                         <ChevronDown 
@@ -439,7 +452,7 @@ export default function EvaluateEmployee() {
                   <p className="text-xs text-slate-400 leading-relaxed">Кнопка <span className="text-white">«Зафиксировать всё»</span> отправит данные сразу по всем навыкам сотрудника.</p>
               </div>
             </div>
-          </div>
+            </div>
         </div>
       </div>
 
@@ -447,7 +460,6 @@ export default function EvaluateEmployee() {
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
       `}</style>
     </div>
   );
