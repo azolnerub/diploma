@@ -52,7 +52,7 @@ class Employee(models.Model):
         return self.full_name
 
 class Evaluation(models.Model):
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='evaluations')
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
     value = models.IntegerField(choices=[(i, i) for i in range(0, 101)])
     date = models.DateField(auto_now_add=True)

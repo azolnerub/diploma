@@ -382,14 +382,20 @@ class EmployeeDynamicsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = Employee.objects.select_related('position', 'department').prefetch_related('competencies')
+        queryset = Employee.objects.select_related('position', 'department', 'user').prefetch_related('evaluations__competency')
 
         user = self.request.user
 
-        if user.role == 'employee':
+        role = getattr(user, 'role', 'employee')
+
+        if role == 'employee':
             queryset = queryset.filter(user=user)
-        elif user.role == 'manager' and hasattr(user, 'employee'):
-            queryset = queryset.filter(department=user.employee.department)
+        elif role in ['manager', 'director']:
+            employee_profile = getattr(user, 'employee', None)
+            if employee_profile and employee_profile.department:
+                queryset = queryset.filter(department=employee_profile.department)
+            else:
+                return Employee.objects.none()
 
         return queryset
 

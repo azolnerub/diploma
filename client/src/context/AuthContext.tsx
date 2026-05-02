@@ -35,7 +35,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // ПРОАКТИВНЫЙ РЕФРЕШ
     // если access_token пропал, но есть refresh_token - пробуем восстановиться
     if (!accessToken && refreshToken) {
       try {

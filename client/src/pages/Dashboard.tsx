@@ -29,7 +29,7 @@ export default function Dashboard() {
               <LayoutDashboard size={24} />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight text-slate-900">HR.Portal</h1>
+              <h1 className="text-xl font-black tracking-tight text-slate-900">HR.Портал</h1>
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">В сети</span>
@@ -44,12 +44,10 @@ export default function Dashboard() {
                 {user.role}
               </span>
             </div>
-            {/* Кнопка Logout удалена */}
           </div>
         </div>
       </nav>
 
-      {/* Остальной код main без изменений */}
       <main className="max-w-7xl mx-auto px-6 py-12">
         <header className="mb-12 relative">
           <div className="absolute -top-10 -left-10 w-40 h-40 bg-indigo-100/50 rounded-full blur-3xl -z-10" />
@@ -77,7 +75,7 @@ export default function Dashboard() {
               <p className="text-slate-500 max-w-sm font-medium leading-relaxed">
                 {user?.role === 'hr'
                   ? 'Управление кадровым составом, профилями и историями развития'
-                  : 'Просмотр команды и доступ к контактам коллег'}
+                  : 'Просмотр команды'}
               </p>
             </div>
           </div>
@@ -107,7 +105,7 @@ export default function Dashboard() {
                 <Star className="text-amber-400 fill-amber-400" size={24} />
               </div>
               <div>
-                <h3 className="text-2xl font-black mb-2">Оценки</h3>
+                <h3 className="text-2xl font-black mb-2">Оценка персонала</h3>
                 <p className="text-slate-400 group-hover:text-white/80 transition-colors text-sm font-medium">
                   {user?.role === 'director'
                   ? 'Оценивание работы руководителей отделов'

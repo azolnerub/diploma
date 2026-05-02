@@ -8,12 +8,20 @@ class CompetencySerializer(serializers.ModelSerializer):
         model = Competency
         fields = ['id', 'name', 'description', 'category']
 
+class EvaluationSerializer(serializers.ModelSerializer):
+    competency_name = serializers.CharField(source='competency.name', read_only=True)
+    competency_id = serializers.IntegerField(source='competency.id', read_only=True)
+
+    class Meta:
+        model = Evaluation
+        fields = ['id', 'competency_id', 'competency_name', 'value', 'date', 'comment']
+
 class EmployeeSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source='user.role', read_only=True)
     position_name = serializers.CharField(source='position.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True)
     department_id = serializers.PrimaryKeyRelatedField(source='department', queryset=Department.objects.all())
-    competencies = serializers.SerializerMethodField()
+    competencies = EvaluationSerializer(source='evaluations', many=True, read_only=True)
     position_id = serializers.PrimaryKeyRelatedField(source='position',  queryset=Position.objects.all())
     dynamics_score = serializers.SerializerMethodField()
     in_reserve = serializers.SerializerMethodField()
@@ -24,14 +32,12 @@ class EmployeeSerializer(serializers.ModelSerializer):
         fields = ['id', 'full_name', 'position_name', 'department_name', 'department_id', 'hire_date',
                   'status', 'competencies', 'dynamics_score', 'in_reserve', 'reserved_positions', 'position_id', 'role']
 
-    def get_competencies(self, obj):
-        comp_ids = Evaluation.objects.filter(employee=obj).values_list('competency_id', flat=True).distinct()
-        competencies = Competency.objects.filter(id__in=comp_ids)
-        return CompetencySerializer(competencies, many=True).data
-
     def get_dynamics_score(self, obj):
         from .views import calculate_dynamics_score
-        return calculate_dynamics_score(obj)
+        try:
+            return calculate_dynamics_score(obj)
+        except Exception:
+            return 0
 
     def get_in_reserve(self, obj):
         return Reserve.objects.filter(employee=obj).exists()
@@ -39,20 +45,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
     def get_reserved_positions(self, obj):
         reserves = Reserve.objects.filter(employee=obj).select_related('position')
         return [
-            {
-                'id': reserve.position.id,
-                'name': reserve.position.name
-            }
-            for reserve in reserves
+            {'id': r.position.id, 'name': r.position.name} for r in reserves
         ]
-
-class EvaluationSerializer(serializers.ModelSerializer):
-    competency_name = serializers.CharField(source='competency.name', read_only=True)
-    competency_id = serializers.IntegerField(source='competency.id', read_only=True)
-
-    class Meta:
-        model = Evaluation
-        fields = ['id', 'competency_id', 'competency_name', 'value', 'date', 'comment']
 
 class DeptSerializer(serializers.ModelSerializer):
     class Meta:

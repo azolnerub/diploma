@@ -48,7 +48,7 @@ export default function Login() {
             <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/20 transition-all duration-500 group-hover:rotate-[360deg] group-hover:scale-110">
               <ShieldCheck size={28} />
             </div>
-            <span className="text-2xl font-black tracking-tighter text-white">HR-Portal</span>
+            <span className="text-2xl font-black tracking-tighter text-white">HR.Портал</span>
           </div>
           
           <h2 className="text-5xl font-black text-white leading-tight mb-6">
